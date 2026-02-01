@@ -52,25 +52,105 @@ pip install -e .
 pip install claude-agent-sdk watchdog
 ```
 
-### CLI Setup
+### CLI Setup (Wrapper Script Method)
 
-Add to `~/.bashrc`:
+Create a wrapper script at `~/.local/bin/task-monitor` (XDG standard location):
 
 ```bash
-# Task Monitor CLI
-export PATH="$HOME/workspaces/task-monitor/.venv/bin:$PATH"
+cat > ~/.local/bin/task-monitor << 'EOF'
+#!/bin/bash
+/home/admin/workspaces/task-monitor/.venv/bin/python -m task_monitor.cli "$@"
+EOF
+
+chmod +x ~/.local/bin/task-monitor
 ```
 
-Then reload: `source ~/.bashrc`
+**Why this approach:**
+- Uses `python -m` to run the module directly (avoids import path issues)
+- No pip installation required
+- Changes to source code take effect immediately
+- Standard XDG user-bin location
+
+### Systemd Service Setup
+
+Create user-level systemd service at `~/.config/systemd/user/task-monitor.service`:
+
+```ini
+[Unit]
+Description=Task Monitor Daemon
+After=network.target
+
+[Service]
+Type=exec
+WorkingDirectory=/home/admin/workspaces/task-monitor
+ExecStart=/home/admin/workspaces/task-monitor/.venv/bin/python -m task_monitor.monitor_daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+```
+
+Then enable and start:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable task-monitor.service
+systemctl --user start task-monitor.service
+```
 
 ### What Gets Installed
 
-| Component | Location |
-|-----------|----------|
-| **Source code** | `/home/admin/workspaces/task-monitor/task_monitor/` |
-| **CLI command** | `/home/admin/workspaces/task-monitor/.venv/bin/task-monitor` (via PATH) |
-| **Virtual environment** | `/home/admin/workspaces/task-monitor/.venv/` |
-| **Systemd service** | `~/.config/systemd/user/task-monitor.service` |
+| Component | Location | Type |
+|-----------|----------|------|
+| **Source code** | `/home/admin/workspaces/task-monitor/task_monitor/` | Directory |
+| **CLI command** | `~/.local/bin/task-monitor` | Wrapper script |
+| **Virtual environment** | `/home/admin/workspaces/task-monitor/.venv/` | Directory |
+| **Systemd service** | `~/.config/systemd/user/task-monitor.service` | Service unit |
+| **Lock file** | `~/.config/task-monitor/task-monitor.lock` | Instance lock |
+
+### Current Installation Details
+
+**CLI Wrapper Script** (`~/.local/bin/task-monitor`):
+```bash
+#!/bin/bash
+/home/admin/workspaces/task-monitor/.venv/bin/python -m task_monitor.cli "$@"
+```
+
+**Systemd Service** (`~/.config/systemd/user/task-monitor.service`):
+```ini
+[Unit]
+Description=Task Monitor Daemon
+After=network.target
+
+[Service]
+Type=exec
+WorkingDirectory=/home/admin/workspaces/task-monitor
+ExecStart=/home/admin/workspaces/task-monitor/.venv/bin/python -m task_monitor.monitor_daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+```
+
+**Verification Commands:**
+```bash
+# Verify CLI wrapper exists and is executable
+ls -la ~/.local/bin/task-monitor
+
+# Verify CLI works
+task-monitor --help
+
+# Verify service status
+systemctl --user status task-monitor.service
+
+# View service logs
+journalctl --user -u task-monitor.service -f
+```
 
 ## Usage
 
