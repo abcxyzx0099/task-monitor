@@ -6,12 +6,15 @@ from pathlib import Path
 from datetime import datetime
 from io import StringIO
 import sys
+import tempfile
 
 from task_monitor.cli import (
     show_task_status,
     show_status,
     show_queue,
-    DEFAULT_PROJECT_ROOT,
+    use_project,
+    get_current_project,
+    CONFIG_FILE,
 )
 
 
@@ -150,15 +153,65 @@ class TestShowQueue:
         assert "Processing: None" in captured.out
 
 
+class TestProjectManagement:
+    """Tests for project management commands (use, current)."""
+
+    def test_use_project_sets_config(self, project_root, monkeypatch, tmp_path):
+        """Test that use_project creates config file with correct path."""
+        # Mock CONFIG_FILE to use temp directory
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr("task_monitor.cli.CONFIG_FILE", temp_config)
+
+        use_project(str(project_root))
+
+        # Verify config was created
+        assert temp_config.exists()
+        config = json.loads(temp_config.read_text())
+        assert config["current_project"] == str(project_root)
+
+    def test_use_project_validates_path_exists(self, monkeypatch, tmp_path, capsys):
+        """Test that use_project validates path exists."""
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr("task_monitor.cli.CONFIG_FILE", temp_config)
+
+        # Use non-existent path
+        result = use_project("/nonexistent/path")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "does not exist" in captured.out
+
+    def test_get_current_project_from_config(self, project_root, monkeypatch, tmp_path):
+        """Test that get_current_project reads from config."""
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr("task_monitor.cli.CONFIG_FILE", temp_config)
+
+        # Create config
+        temp_config.write_text(json.dumps({"current_project": str(project_root)}))
+
+        result = get_current_project()
+        assert result == project_root
+
+    def test_get_current_project_returns_none_when_no_config(self, monkeypatch, tmp_path):
+        """Test that get_current_project returns None when config doesn't exist."""
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr("task_monitor.cli.CONFIG_FILE", temp_config)
+
+        result = get_current_project()
+        assert result is None
+
+
 class TestMain:
     """Tests for main CLI entry point."""
 
-    def test_main_queue_command(self, project_root, queue_state_file, monkeypatch, capsys):
+    def test_main_queue_command(self, project_root, queue_state_file, monkeypatch, capsys, tmp_path):
         """Test main function with queue command."""
         import task_monitor.cli
 
-        # Mock the project root
-        monkeypatch.setattr(task_monitor.cli, "DEFAULT_PROJECT_ROOT", project_root)
+        # Mock CONFIG_FILE and set current project
+        temp_config = tmp_path / "config.json"
+        temp_config.write_text(json.dumps({"current_project": str(project_root)}))
+        monkeypatch.setattr(task_monitor.cli, "CONFIG_FILE", temp_config)
 
         # Mock sys.argv
         monkeypatch.setattr(sys, "argv", ["task-monitor", "queue"])
@@ -171,8 +224,6 @@ class TestMain:
 
     def test_main_with_project_path(self, project_root, queue_state_file, monkeypatch, capsys):
         """Test main function with custom project path."""
-        import task_monitor.cli
-
         monkeypatch.setattr(sys, "argv", ["task-monitor", "--project-path", str(project_root), "queue"])
 
         from task_monitor.cli import main
@@ -181,15 +232,53 @@ class TestMain:
         captured = capsys.readouterr()
         assert "Queue size:" in captured.out
 
-    def test_main_default_status_command(self, project_root, completed_job_result, monkeypatch, capsys):
-        """Test main function with default status command."""
+    def test_main_with_project_path_override(self, project_root, completed_job_result, monkeypatch, capsys, tmp_path):
+        """Test main function with project path override using -p."""
         import task_monitor.cli
 
-        monkeypatch.setattr(task_monitor.cli, "DEFAULT_PROJECT_ROOT", project_root)
-        monkeypatch.setattr(sys, "argv", ["task-monitor", "completed-job"])
+        # Mock CONFIG_FILE to avoid reading actual config
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr(task_monitor.cli, "CONFIG_FILE", temp_config)
+
+        # Use -p to override project path
+        monkeypatch.setattr(sys, "argv", ["task-monitor", "--project-path", str(project_root), "status"])
 
         from task_monitor.cli import main
         main()
 
         captured = capsys.readouterr()
-        assert "Status: completed" in captured.out
+        # Status command should show running or stopped
+        assert "Running" in captured.out or "Stopped" in captured.out
+
+    def test_main_use_command(self, project_root, monkeypatch, capsys, tmp_path):
+        """Test main function with use command."""
+        import task_monitor.cli
+
+        temp_config = tmp_path / "config.json"
+        monkeypatch.setattr(task_monitor.cli, "CONFIG_FILE", temp_config)
+
+        monkeypatch.setattr(sys, "argv", ["task-monitor", "use", str(project_root)])
+
+        from task_monitor.cli import main
+        main()
+
+        captured = capsys.readouterr()
+        assert "Current project set to:" in captured.out
+        assert str(project_root) in captured.out
+
+    def test_main_current_command(self, project_root, monkeypatch, capsys, tmp_path):
+        """Test main function with current command."""
+        import task_monitor.cli
+
+        temp_config = tmp_path / "config.json"
+        temp_config.write_text(json.dumps({"current_project": str(project_root)}))
+        monkeypatch.setattr(task_monitor.cli, "CONFIG_FILE", temp_config)
+
+        monkeypatch.setattr(sys, "argv", ["task-monitor", "current"])
+
+        from task_monitor.cli import main
+        main()
+
+        captured = capsys.readouterr()
+        assert "Current project:" in captured.out
+        assert str(project_root) in captured.out

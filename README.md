@@ -108,6 +108,7 @@ systemctl --user start task-monitor.service
 | **CLI command** | `~/.local/bin/task-monitor` | Wrapper script |
 | **Virtual environment** | `/home/admin/workspaces/task-monitor/.venv/` | Directory |
 | **Systemd service** | `~/.config/systemd/user/task-monitor.service` | Service unit |
+| **Config file** | `~/.config/task-monitor/config.json` | Project configuration |
 | **Lock file** | `~/.config/task-monitor/task-monitor.lock` | Instance lock |
 
 ### Current Installation Details
@@ -194,14 +195,39 @@ tasks/pending/task-20260130-150000-analyze-data.md
 Check queue and execution status:
 
 ```bash
+# Show daemon status
+task-monitor status
+
 # Show queue status
 task-monitor queue
 
-# Show specific task status (by ID)
-task-monitor task-20260131-045746-test-new-cli-feature
+# Show current project
+task-monitor current
 
-# Show all completed tasks
-task-monitor status
+# Set current project
+task-monitor use /path/to/project
+```
+
+### Project Management
+
+```bash
+# Set current project
+task-monitor use /path/to/project
+
+# Show current project
+task-monitor current
+
+# Override project for specific command
+task-monitor -p /path/to/project status
+task-monitor -p /path/to/project queue
+```
+
+**Config file:** `~/.config/task-monitor/config.json`
+
+```json
+{
+  "current_project": "/home/admin/workspaces/datachat"
+}
 ```
 
 **Task Status Output:**
@@ -285,24 +311,29 @@ journalctl --user -u task-monitor -f
 | `task_monitor/cli.py` | Status query CLI source code |
 | `pyproject.toml` | Package configuration |
 | `~/.config/systemd/user/task-monitor.service` | Systemd service unit (includes PIDFile directive) |
+| `~/.config/task-monitor/config.json` | Current project configuration |
 | `~/.config/task-monitor/task-monitor.lock` | Instance lock file (prevents multiple instances) |
 
 ## Configuration
 
-### Project Registry
+### Current Project
 
-Location: `~/.config/task-monitor/registered.json`
+Location: `~/.config/task-monitor/config.json`
 
 ```json
 {
-  "projects": {
-    "datachat": {
-      "path": "/home/admin/workspaces/datachat",
-      "enabled": true,
-      "registered_at": "2026-01-30T12:00:00"
-    }
-  }
+  "current_project": "/home/admin/workspaces/datachat"
 }
+```
+
+Set the current project with:
+```bash
+task-monitor use /path/to/project
+```
+
+Show the current project with:
+```bash
+task-monitor current
 ```
 
 ### Lock File
@@ -310,12 +341,6 @@ Location: `~/.config/task-monitor/registered.json`
 | File | Purpose |
 |------|---------|
 | `~/.config/task-monitor/task-monitor.lock` | Prevents multiple instances from running (uses fcntl file locking) |
-
-### Environment Variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `MONITOR_SYSTEM_ROOT` | `/home/admin/workspaces/task-monitor` | System root directory |
 
 ## Making Changes
 

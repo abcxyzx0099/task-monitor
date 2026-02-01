@@ -5,14 +5,83 @@ from pathlib import Path
 from datetime import datetime
 
 
-# Default project root - can be overridden by --project-path argument
-DEFAULT_PROJECT_ROOT = Path("/home/admin/workspaces/datachat")
+# Config file location
+CONFIG_FILE = Path.home() / ".config" / "task-monitor" / "config.json"
 
 # Task monitor path relative to project root (e.g., "tasks/task-monitor")
 task_monitor_path = "tasks/task-monitor"
 
 
-def show_task_status(task_id: str, project_root: Path = DEFAULT_PROJECT_ROOT):
+def load_config():
+    """Load config from file."""
+    if not CONFIG_FILE.exists():
+        return {}
+    with open(CONFIG_FILE, 'r') as f:
+        return json.load(f)
+
+
+def save_config(config):
+    """Save config to file."""
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+def get_current_project():
+    """Get the current project path from config."""
+    config = load_config()
+    path = config.get("current_project")
+    if path:
+        return Path(path)
+    return None
+
+
+def use_project(path: str):
+    """Set the current project path."""
+    project_path = Path(path).expanduser().resolve()
+    if not project_path.exists():
+        print(f"Error: Project path does not exist: {project_path}")
+        return False
+
+    config = load_config()
+    config["current_project"] = str(project_path)
+    save_config(config)
+    print(f"Current project set to: {project_path}")
+    return True
+
+
+def show_current():
+    """Show the current project."""
+    path = get_current_project()
+    if not path:
+        print("No current project set.")
+        print()
+        print("Set a project with: task-monitor use <path>")
+        return
+
+    print(f"Current project: {path}")
+
+
+def get_project_root(project_path: str = None):
+    """Get project root from argument or config."""
+    # 1. Explicit path takes priority
+    if project_path:
+        return Path(project_path).expanduser().resolve()
+
+    # 2. Use current project from config
+    current_path = get_current_project()
+    if current_path:
+        return current_path
+
+    # 3. No current project set
+    print("Error: No current project set.")
+    print()
+    print("Set a project with: task-monitor use <path>")
+    print("Or specify project path with: task-monitor -p <path> <command>")
+    raise SystemExit(1)
+
+
+def show_task_status(task_id: str, project_root: Path):
     """Show status of a specific task across all stages (waiting, processing, completed)."""
 
     # Normalize task_id - ensure it has .md extension if just the base name
@@ -115,7 +184,7 @@ def check_daemon_running() -> bool:
             return False
 
 
-def show_status(task_id: str = None, project_root: Path = DEFAULT_PROJECT_ROOT):
+def show_status(task_id: str = None, project_root: Path = None):
     """Show daemon status - simple check if service is running."""
     if task_id:
         show_task_status(task_id, project_root)
@@ -124,12 +193,13 @@ def show_status(task_id: str = None, project_root: Path = DEFAULT_PROJECT_ROOT):
         print(f"{'Running' if daemon_running else 'Stopped'}")
 
 
-def show_queue(project_root: Path = DEFAULT_PROJECT_ROOT):
+def show_queue(project_root: Path):
     """Show current queue state."""
     state_file = project_root / task_monitor_path / "state" / "queue_state.json"
     if state_file.exists():
         with open(state_file, 'r') as f:
             state = json.load(f)
+        print(f"Project: {project_root}")
         print(f"Queue size: {state['queue_size']}")
         print(f"Processing: {state.get('current_task', 'None')}")
         if state.get('queued_tasks'):
@@ -137,24 +207,57 @@ def show_queue(project_root: Path = DEFAULT_PROJECT_ROOT):
             for i, task in enumerate(state['queued_tasks'], 1):
                 print(f"  {i}. {task}")
     else:
+        print(f"Project: {project_root}")
         print("Queue state not available (monitor may not be running)")
 
 
 def main():
     """CLI entry point - called by setuptools entry point."""
     parser = argparse.ArgumentParser(description="Task Monitor CLI")
-    parser.add_argument("--project-path", "-p", type=str, help="Project root path")
-    parser.add_argument("command", nargs="?", default="status", help="Command: status, queue, or task_id")
+    parser.add_argument("--project-path", "-p", type=str, help="Project root path (overrides current)")
+
+    # Subcommands
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Status command
+    subparsers.add_parser("status", help="Show daemon status")
+
+    # Queue command
+    subparsers.add_parser("queue", help="Show queue state")
+
+    # Current command - show current project
+    subparsers.add_parser("current", help="Show current project")
+
+    # Use command - set current project
+    use_parser = subparsers.add_parser("use", help="Set current project")
+    use_parser.add_argument("path", help="Project path")
+
     args = parser.parse_args()
 
-    # Project root - where tasks/{TASK_MONITOR_DIR}/pending, results, state directories are located
-    project_root = Path(args.project_path) if args.project_path else DEFAULT_PROJECT_ROOT
+    # Handle commands that don't need project root
+    if args.command == "use":
+        use_project(args.path)
+        return
+    elif args.command == "current":
+        show_current()
+        return
 
+    # Get project root from argument or config
+    try:
+        project_root = get_project_root(args.project_path)
+    except SystemExit:
+        return
+
+    # Handle commands that need project root
     if args.command == "queue":
         show_queue(project_root)
     elif args.command == "status":
         show_status(None, project_root)
+    elif args.command is None:
+        # Default: show status
+        show_status(None, project_root)
     else:
+        # Treat as task ID
         show_status(args.command, project_root)
 
 
