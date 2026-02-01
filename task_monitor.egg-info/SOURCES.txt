@@ -16,3 +16,4 @@ tests/conftest.py
 tests/test_cli.py
 tests/test_job_executor.py
 tests/test_models.py
+tests/test_monitor_daemon.py
