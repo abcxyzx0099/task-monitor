@@ -13,6 +13,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(MONITOR_SYSTEM_ROOT))
 from task_monitor.models import TaskResult, TaskStatus
 
+# Task monitor path relative to project root (e.g., "tasks/task-monitor")
+task_monitor_path = "tasks/task-monitor"
+
 # Configure logging to systemd journal (standard for Linux services)
 logging.basicConfig(
     level=logging.INFO,
@@ -29,7 +32,8 @@ class TaskExecutor:
         self.results_dir = Path(results_dir)
         self.project_root = Path(project_root).resolve()
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        self.archive_dir = self.project_root / 'tasks' / 'archive'
+        # Archive is in task-monitor subdirectory
+        self.archive_dir = self.project_root / task_monitor_path / 'archive'
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
     async def execute_task(self, task_file: str) -> TaskResult:
@@ -46,7 +50,7 @@ class TaskExecutor:
         # Configure SDK
         options = ClaudeAgentOptions(
             cwd=str(self.project_root),  # Set working directory
-            permission_mode="acceptEdits",  # Auto-accept file edits
+            permission_mode="bypassPermissions",  # Full autonomous execution
             setting_sources=["project"],  # Load project settings (including skills)
         )
 
@@ -65,7 +69,7 @@ class TaskExecutor:
         try:
             # Create query object
             q = query(
-                prompt=f"""/task-coordination
+                prompt=f"""/task-implementation
 
 Execute the following task:
 

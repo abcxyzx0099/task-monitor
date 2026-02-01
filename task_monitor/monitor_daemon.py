@@ -1,6 +1,8 @@
 import asyncio
+import fcntl
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -15,18 +17,75 @@ from task_monitor.task_executor import TaskExecutor
 from task_monitor.models import TaskStatus
 
 # Configuration
+# Task monitor path relative to project root (e.g., "tasks/task-monitor")
+task_monitor_path = "tasks/task-monitor"
+
 REGISTRY_FILE = Path.home() / ".config" / "task-monitor" / "registered.json"
+LOCK_FILE = Path.home() / ".config" / "task-monitor" / "task-monitor.lock"
+
+
+class InstanceLock:
+    """File-based lock to prevent multiple instances."""
+
+    def __init__(self, lock_path: Path):
+        self.lock_path = lock_path
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self.lock_file = None
+        self.acquired = False
+
+    def acquire(self) -> bool:
+        """Acquire the lock. Returns True if successful, False if already locked."""
+        try:
+            self.lock_file = open(self.lock_path, 'w')
+            # Try to acquire exclusive non-blocking lock
+            fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Write PID to lock file
+            self.lock_file.write(str(os.getpid()))
+            self.lock_file.flush()
+            self.acquired = True
+            return True
+        except (IOError, OSError):
+            # Lock is held by another process
+            if self.lock_file:
+                self.lock_file.close()
+            self.lock_file = None
+            return False
+
+    def release(self):
+        """Release the lock."""
+        if self.lock_file:
+            try:
+                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
+                self.lock_file.close()
+            except Exception:
+                pass
+            self.lock_file = None
+
+        if self.lock_path.exists():
+            try:
+                self.lock_path.unlink()
+            except Exception:
+                pass
+
+        self.acquired = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
 
 
 class MultiProjectMonitor:
-    """Monitor multiple projects, each with their own tasks/pending directory."""
+    """Monitor multiple projects, each with their own task_monitor_path/pending directory."""
 
     def __init__(self):
-        self.projects = {}  # {project_name: {path, executor, queue, observer, event_handler}}
+        self.projects = {}  # {project_name: {path, executor, queue, observer, event_handler, started}}
         self.running = False
         self.observers = []
         self.event_loop = None
         self.processor_tasks = []  # Track processor tasks for proper cleanup
+        self.instance_lock = InstanceLock(LOCK_FILE)
 
     def load_registry(self):
         """Load project registry."""
@@ -48,10 +107,10 @@ class MultiProjectMonitor:
             return False
 
         # Create directories
-        tasks_dir = project_path / "tasks" / "pending"
-        results_dir = project_path / "tasks" / "results"
-        logs_dir = project_path / "tasks" / "logs"
-        state_dir = project_path / "tasks" / "state"
+        tasks_dir = project_path / task_monitor_path / "pending"
+        results_dir = project_path / task_monitor_path / "results"
+        logs_dir = project_path / task_monitor_path / "logs"
+        state_dir = project_path / task_monitor_path / "state"
 
         tasks_dir.mkdir(parents=True, exist_ok=True)
         results_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +132,8 @@ class MultiProjectMonitor:
             "executor": executor,
             "queue": queue,
             "observer": None,
-            "event_handler": None
+            "event_handler": None,
+            "started": False
         }
 
         logging.info(f"Project '{name}' configured: {project_path}")
@@ -90,6 +150,13 @@ class MultiProjectMonitor:
         logger = logging.getLogger(__name__)
 
         logger.info("Starting Multi-Project Task Monitor")
+
+        # Try to acquire instance lock
+        if not self.instance_lock.acquire():
+            logger.error(f"Another instance is already running (lock file: {LOCK_FILE}). Exiting.")
+            sys.exit(1)
+
+        logger.info(f"Instance lock acquired: {LOCK_FILE} (PID {os.getpid()})")
 
         # Load registry and setup all projects
         projects_config = self.load_registry()
@@ -120,7 +187,7 @@ class MultiProjectMonitor:
 
         # Create observers and event handlers with access to event loop
         for name, project in self.projects.items():
-            tasks_dir = project["path"] / "tasks" / "pending"
+            tasks_dir = project["path"] / task_monitor_path / "pending"
             event_handler = TaskFileHandler(
                 project["queue"],
                 name,
@@ -136,7 +203,8 @@ class MultiProjectMonitor:
         # Start all observers
         for name, project in self.projects.items():
             project["observer"].start()
-            logging.info(f"Observer started for '{name}': {project['path'] / 'tasks' / 'pending'}")
+            project["started"] = True
+            logging.info(f"Observer started for '{name}': {project['path'] / task_monitor_path / 'pending'}")
 
         # Start queue processors for all projects
         await self._run_all_queues()
@@ -243,10 +311,14 @@ class MultiProjectMonitor:
             if project.get("observer"):
                 project["observer"].stop()
 
-        # Wait for observers to finish
+        # Wait for observers to finish (only those that were started)
         for project in self.projects.values():
-            if project.get("observer"):
+            if project.get("observer") and project.get("started", False):
                 project["observer"].join()
+
+        # Release instance lock
+        self.instance_lock.release()
+        logging.info(f"Instance lock released: {LOCK_FILE}")
 
         logging.info("Monitor stopped")
 
@@ -367,6 +439,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("Keyboard interrupt received")
         monitor.stop()
+    except SystemExit as e:
+        # Exit from check_pid_file - don't remove PID file
+        sys.exit(e.code)
     except Exception as e:
         logging.error(f"Unexpected error: {e}", exc_info=True)
         monitor.stop()
+        sys.exit(1)
