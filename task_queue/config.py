@@ -29,7 +29,7 @@ class ConfigManager:
         Initialize configuration manager.
 
         Args:
-            config_file: Path to configuration file. Defaults to ~/.config/task-monitor/config.json
+            config_file: Path to configuration file. Defaults to ~/.config/task-queue/config.json
         """
         self.config_file = Path(config_file) if config_file else DEFAULT_CONFIG_FILE
         self.config_file.parent.mkdir(parents=True, exist_ok=True)

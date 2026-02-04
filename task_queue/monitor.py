@@ -56,7 +56,7 @@ class TaskQueue:
             return None
 
         if self._processor is None:
-            # Define paths (in ~/.config/task-monitor/)
+            # Define paths (in ~/.config/task-queue/)
             config_dir = self.config_manager.config_file.parent
             state_dir = config_dir / "state"
             results_dir = config_dir / "results"

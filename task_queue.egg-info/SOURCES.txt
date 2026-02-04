@@ -8,7 +8,6 @@ task_queue/daemon.py
 task_queue/executor.py
 task_queue/models.py
 task_queue/monitor.py
-task_queue/monitor_daemon.py
 task_queue/processor.py
 task_queue/scanner.py
 task_queue/task_executor.py

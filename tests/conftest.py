@@ -1,15 +1,17 @@
-"""Test fixtures for task-monitor tests."""
+"""Test fixtures for task-queue tests."""
 
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock
 import json
-import asyncio
 
-from task_monitor.models import TaskStatus, TaskResult, QueueState, TaskInfo
+from task_queue.models import (
+    TaskStatus, TaskResult, QueueState, Task,
+    TaskSource, QueueConfig, SpecDirectory, QueueSettings
+)
 
 
 class AsyncIteratorMock:
@@ -41,16 +43,42 @@ def temp_dir():
 @pytest.fixture
 def project_root(temp_dir):
     """Create a mock project root with task directories."""
-    task_monitor_dir = temp_dir / "tasks" / "task-monitor"
-    task_monitor_dir.mkdir(parents=True)
+    task_queue_dir = temp_dir / "tasks" / "task-queue"
+    task_spec_dir = temp_dir / "tasks" / "task-specifications"
+    task_queue_dir.mkdir(parents=True)
+    task_spec_dir.mkdir(parents=True)
 
     # Create subdirectories
-    (task_monitor_dir / "pending").mkdir()
-    (task_monitor_dir / "results").mkdir()
-    (task_monitor_dir / "state").mkdir()
-    (task_monitor_dir / "archive").mkdir()
+    (task_queue_dir / "state").mkdir()
+    (task_queue_dir / "results").mkdir()
+    (task_queue_dir / "logs").mkdir()
+    (task_spec_dir / "archive").mkdir(parents=True)
 
     return temp_dir
+
+
+@pytest.fixture
+def task_spec_dir(project_root):
+    """Get the task specifications directory."""
+    return project_root / "tasks" / "task-specifications"
+
+
+@pytest.fixture
+def task_queue_dir(project_root):
+    """Get the task queue directory."""
+    return project_root / "tasks" / "task-queue"
+
+
+@pytest.fixture
+def sample_task():
+    """Create a sample Task for testing."""
+    return Task(
+        task_id="task-20250131-100000-test-task",
+        spec_file="tasks/task-specifications/task-20250131-100000-test-task.md",
+        spec_dir_id="main",
+        status=TaskStatus.PENDING,
+        source=TaskSource.LOAD,
+    )
 
 
 @pytest.fixture
@@ -58,19 +86,16 @@ def sample_task_result():
     """Create a sample TaskResult for testing."""
     return TaskResult(
         task_id="test-task-001",
+        spec_file="tasks/task-specifications/test-task.md",
+        spec_dir_id="main",
         status=TaskStatus.COMPLETED,
-        created_at=datetime(2025, 1, 31, 10, 0, 0),
-        started_at=datetime(2025, 1, 31, 10, 0, 5),
-        completed_at=datetime(2025, 1, 31, 10, 0, 15),
-        queue_position=1,
-        worker_output={"summary": "Test task completed successfully"},
-        audit_score=95,
-        audit_notes="Excellent work",
-        artifacts=["output.txt", "report.pdf"],
+        started_at="2025-01-31T10:00:05",
+        completed_at="2025-01-31T10:00:15",
         duration_seconds=10.5,
+        cost_usd=0.05,
         stdout="Processing complete",
         stderr=None,
-        retry_count=0,
+        attempts=1,
     )
 
 
@@ -78,123 +103,102 @@ def sample_task_result():
 def sample_queue_state():
     """Create a sample QueueState for testing."""
     return QueueState(
-        queue_size=3,
-        current_task="task-001.md",
-        is_processing=True,
-        queued_tasks=["task-002.md", "task-003.md", "task-004.md"],
+        queue=[
+            Task(
+                task_id="task-001.md",
+                spec_file="tasks/task-specifications/task-001.md",
+                spec_dir_id="main",
+                status=TaskStatus.PENDING,
+            ),
+            Task(
+                task_id="task-002.md",
+                spec_file="tasks/task-specifications/task-002.md",
+                spec_dir_id="main",
+                status=TaskStatus.COMPLETED,
+            ),
+        ],
     )
 
 
 @pytest.fixture
-def sample_task_info():
-    """Create a sample TaskInfo for testing."""
-    return TaskInfo(
-        task_id="test-task-001",
-        status=TaskStatus.QUEUED,
-        created_at=datetime(2025, 1, 31, 10, 0, 0),
-        queue_position=1,
+def sample_config():
+    """Create a sample QueueConfig for testing."""
+    return QueueConfig(
+        project_path="/tmp/test-project",
+        spec_directories=[
+            SpecDirectory(
+                id="main",
+                path="/tmp/test-project/tasks/task-specifications",
+                description="Main spec directory"
+            )
+        ]
     )
 
 
 @pytest.fixture
 def mock_query():
     """Create a mock Claude SDK query object."""
-    # Create mock messages
     success_msg = Mock()
     success_msg.subtype = "success"
     success_msg.result = "Task completed successfully"
     success_msg.usage = {"total_tokens": 1000}
     success_msg.total_cost_usd = 0.05
 
-    # Use spec to limit attributes so hasattr returns False for 'subtype'
     content_msg = Mock(spec=['content'])
     content_msg.content = [Mock(text="Processing...")]
 
-    # Return an async iterator mock
     return AsyncIteratorMock([content_msg, success_msg])
 
 
 @pytest.fixture
-def queued_task_file(project_root):
-    """Create a queued task file in the pending directory."""
-    task_file = project_root / "tasks" / "task-monitor" / "pending" / "queued-task.md"
-    task_file.write_text("# Test Job\n\nThis is a test task.")
+def task_spec_file(task_spec_dir):
+    """Create a sample task specification file."""
+    task_file = task_spec_dir / "task-20250131-100000-test-task.md"
+    task_file.write_text("""# Task: Test Task
+
+**Status**: pending
+
+---
+
+## Task
+Test task description
+
+## Context
+Test context
+
+## Requirements
+1. Test requirement
+""")
     return task_file
 
 
 @pytest.fixture
-def queued_job_file(project_root):
-    """Create a queued job file in the pending directory (alias for queued_task_file)."""
-    task_file = project_root / "tasks" / "task-monitor" / "pending" / "queued-job.md"
-    task_file.write_text("# Test Queued Job\n\nThis is a test queued task.")
-    return task_file
-
-
-@pytest.fixture
-def completed_task_result(project_root):
-    """Create a completed task result file."""
-    result_file = project_root / "tasks" / "task-monitor" / "results" / "completed-task.json"
-    result_data = {
-        "task_id": "completed-task",
-        "status": "completed",
-        "created_at": "2025-01-31T10:00:00",
-        "started_at": "2025-01-31T10:00:05",
-        "completed_at": "2025-01-31T10:00:15",
-        "duration_seconds": 10.5,
-        "stdout": "Job output",
-        "worker_output": {
-            "summary": "Task completed",
-            "usage": {"total_tokens": 1000, "cost_usd": 0.05}
-        }
-    }
-    result_file.write_text(json.dumps(result_data))
-    return result_file
-
-
-@pytest.fixture
-def completed_job_result(project_root):
-    """Create a completed job result file (alias for completed_task_result)."""
-    result_file = project_root / "tasks" / "task-monitor" / "results" / "completed-job.json"
-    result_data = {
-        "task_id": "completed-job",
-        "status": "completed",
-        "created_at": "2025-01-31T10:00:00",
-        "started_at": "2025-01-31T10:00:05",
-        "completed_at": "2025-01-31T10:00:15",
-        "duration_seconds": 10.5,
-        "stdout": "Job output",
-        "worker_output": {
-            "summary": "Task completed",
-            "usage": {"total_tokens": 1000, "cost_usd": 0.05}
-        }
-    }
-    result_file.write_text(json.dumps(result_data))
-    return result_file
-
-
-@pytest.fixture
-def current_job_file(project_root):
-    """Create a current job file for testing processing status."""
-    task_file = project_root / "tasks" / "task-monitor" / "pending" / "current-job.md"
-    task_file.write_text("# Current Job\n\nThis is a currently processing task.")
-    return task_file
-
-
-@pytest.fixture
-def queue_state_file(project_root, current_job_file):
+def queue_state_file(task_queue_dir):
     """Create a queue state file."""
-    # Create pending-job.md for queued tasks
-    pending_job = project_root / "tasks" / "task-monitor" / "pending" / "pending-job.md"
-    pending_job.write_text("# Pending Job\n\nThis is a pending task.")
-
-    state_file = project_root / "tasks" / "task-monitor" / "state" / "queue_state.json"
+    state_file = task_queue_dir / "state" / "queue_state.json"
     state_data = {
-        "project": "test-project",
-        "queue_size": 2,
-        "current_task": "current-job.md",
-        "is_processing": True,
-        "task_start_time": "2025-01-31T10:00:00",
-        "queued_tasks": ["queued-job.md", "pending-job.md"]
+        "version": "1.0",
+        "queue": [
+            {
+                "task_id": "task-001.md",
+                "spec_file": "tasks/task-specifications/task-001.md",
+                "spec_dir_id": "main",
+                "status": "pending",
+                "source": "load",
+                "added_at": "2025-01-31T10:00:00",
+                "attempts": 0
+            }
+        ],
+        "processing": {
+            "is_processing": False,
+            "current_task": None
+        },
+        "statistics": {
+            "total_queued": 1,
+            "total_completed": 0,
+            "total_failed": 0
+        },
+        "updated_at": "2025-01-31T10:00:00"
     }
     state_file.write_text(json.dumps(state_data))
     return state_file

@@ -1,1 +1,1 @@
-"""Test suite for task-monitor."""
+"""Test suite for task-queue."""

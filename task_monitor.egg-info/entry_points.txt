@@ -1,3 +1,0 @@
-[console_scripts]
-task-monitor = task_monitor.cli:main
-task-monitor-daemon = task_monitor.daemon:main

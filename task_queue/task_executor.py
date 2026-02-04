@@ -8,13 +8,11 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 
 # Add paths for module imports
 PROJECT_ROOT = Path("/home/admin/workspaces/datachat")
-MONITOR_SYSTEM_ROOT = Path("/home/admin/workspaces/task-monitor")
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(MONITOR_SYSTEM_ROOT))
 from task_queue.models import TaskResult, TaskStatus
 
-# Task monitor path relative to project root (e.g., "tasks/task-monitor")
-task_monitor_path = "tasks/task-monitor"
+# Task queue path relative to project root
+task_queue_path = "tasks/task-queue"
 
 # Configure logging to systemd journal (standard for Linux services)
 logging.basicConfig(
@@ -32,8 +30,8 @@ class TaskExecutor:
         self.results_dir = Path(results_dir)
         self.project_root = Path(project_root).resolve()
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        # Archive is in task-monitor subdirectory
-        self.archive_dir = self.project_root / task_monitor_path / 'archive'
+        # Archive is in task-archive directory
+        self.archive_dir = self.project_root / "tasks" / "task-archive"
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
     async def execute_task(self, task_file: str) -> TaskResult:

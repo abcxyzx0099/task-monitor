@@ -1,174 +1,259 @@
-"""Tests for task_monitor.models module."""
+"""Tests for task_queue models."""
 
 import pytest
 from datetime import datetime
+from pathlib import Path
 from pydantic import ValidationError
 
-from task_monitor.models import TaskStatus, TaskResult, QueueState, TaskInfo
+from task_queue.models import (
+    TaskStatus, TaskSource, Task, TaskResult, QueueState,
+    SpecDirectory, QueueSettings, QueueConfig, Statistics,
+    ProcessingState, DiscoveredTask, SystemStatus, SpecDirectoryStatus
+)
 
 
 class TestTaskStatus:
     """Tests for TaskStatus enum."""
 
-    def test_job_status_values(self):
-        """Test TaskStatus enum has correct values."""
-        assert TaskStatus.QUEUED == "queued"
+    def test_status_values(self):
+        """Test TaskStatus enum values."""
+        assert TaskStatus.PENDING == "pending"
         assert TaskStatus.RUNNING == "running"
         assert TaskStatus.COMPLETED == "completed"
         assert TaskStatus.FAILED == "failed"
-        assert TaskStatus.RETRYING == "retrying"
+        assert TaskStatus.CANCELLED == "cancelled"
 
-    def test_job_status_comparison(self):
-        """Test TaskStatus comparison works."""
-        status = TaskStatus.COMPLETED
-        assert status == "completed"
-        assert status != "failed"
+
+class TestTaskSource:
+    """Tests for TaskSource enum."""
+
+    def test_source_values(self):
+        """Test TaskSource enum values."""
+        assert TaskSource.LOAD == "load"
+        assert TaskSource.MANUAL == "manual"
+        assert TaskSource.API == "api"
+
+
+class TestTask:
+    """Tests for Task model."""
+
+    def test_create_task(self):
+        """Test creating a Task."""
+        task = Task(
+            task_id="task-20250131-100000-test",
+            spec_file="tasks/task-specifications/task.md",
+            spec_dir_id="main"
+        )
+        assert task.task_id == "task-20250131-100000-test"
+        assert task.spec_file == "tasks/task-specifications/task.md"
+        assert task.spec_dir_id == "main"
+        assert task.status == TaskStatus.PENDING
+        assert task.source == TaskSource.LOAD
+        assert task.attempts == 0
+
+    def test_task_with_all_fields(self):
+        """Test creating a Task with all fields."""
+        task = Task(
+            task_id="task-20250131-100000-test",
+            spec_file="tasks/task-specifications/task.md",
+            spec_dir_id="main",
+            status=TaskStatus.COMPLETED,
+            source=TaskSource.MANUAL,
+            started_at="2025-01-31T10:00:00",
+            completed_at="2025-01-31T10:00:10",
+            attempts=2,
+            error="Test error"
+        )
+        assert task.status == TaskStatus.COMPLETED
+        assert task.source == TaskSource.MANUAL
+        assert task.attempts == 2
+        assert task.error == "Test error"
 
 
 class TestTaskResult:
     """Tests for TaskResult model."""
 
-    def test_job_result_creation_minimal(self):
-        """Test TaskResult creation with minimal required fields."""
+    def test_create_task_result(self):
+        """Test creating a TaskResult."""
         result = TaskResult(
-            task_id="test-001",
+            task_id="task-001",
+            spec_file="tasks/task-specifications/task.md",
+            spec_dir_id="main",
             status=TaskStatus.COMPLETED,
-            created_at=datetime.now(),
+            started_at="2025-01-31T10:00:00",
+            completed_at="2025-01-31T10:00:10",
+            duration_seconds=10.0
         )
-        assert result.task_id == "test-001"
+        assert result.task_id == "task-001"
         assert result.status == TaskStatus.COMPLETED
-        assert result.started_at is None
-        assert result.completed_at is None
-        assert result.queue_position is None
-        assert result.worker_output is None
-        assert result.audit_score is None
-        assert result.audit_notes is None
-        assert result.artifacts == []
-        assert result.error is None
-        assert result.retry_count == 0
-        assert result.stdout is None
-        assert result.stderr is None
-        assert result.duration_seconds is None
+        assert result.duration_seconds == 10.0
+        assert result.cost_usd == 0.0
 
-    def test_job_result_creation_full(self):
-        """Test TaskResult creation with all fields."""
-        created_at = datetime(2025, 1, 31, 10, 0, 0)
-        started_at = datetime(2025, 1, 31, 10, 0, 5)
-        completed_at = datetime(2025, 1, 31, 10, 0, 15)
-
+    def test_task_result_with_output(self):
+        """Test TaskResult with output."""
         result = TaskResult(
-            task_id="test-002",
-            status=TaskStatus.COMPLETED,
-            created_at=created_at,
-            started_at=started_at,
-            completed_at=completed_at,
-            queue_position=1,
-            worker_output={"summary": "Success"},
-            audit_score=100,
-            audit_notes="Perfect",
-            artifacts=["file1.txt", "file2.txt"],
-            error=None,
-            retry_count=0,
-            stdout="Output here",
-            stderr="Errors here",
-            duration_seconds=10.5,
-        )
-        assert result.task_id == "test-002"
-        assert result.status == TaskStatus.COMPLETED
-        assert result.created_at == created_at
-        assert result.started_at == started_at
-        assert result.completed_at == completed_at
-        assert result.queue_position == 1
-        assert result.worker_output == {"summary": "Success"}
-        assert result.audit_score == 100
-        assert result.audit_notes == "Perfect"
-        assert result.artifacts == ["file1.txt", "file2.txt"]
-        assert result.error is None
-        assert result.retry_count == 0
-        assert result.stdout == "Output here"
-        assert result.stderr == "Errors here"
-        assert result.duration_seconds == 10.5
-
-    def test_job_result_serialization(self):
-        """Test TaskResult can be serialized to JSON."""
-        result = TaskResult(
-            task_id="test-003",
+            task_id="task-001",
+            spec_file="tasks/task-specifications/task.md",
+            spec_dir_id="main",
             status=TaskStatus.FAILED,
-            created_at=datetime(2025, 1, 31, 10, 0, 0),
-            error="Something went wrong",
-            retry_count=2,
+            started_at="2025-01-31T10:00:00",
+            duration_seconds=5.0,
+            stdout="Some output",
+            stderr="Error occurred",
+            error="Task failed"
         )
-        json_str = result.model_dump_json()
-        assert "test-003" in json_str
-        assert "failed" in json_str
-        assert "Something went wrong" in json_str
-
-    def test_job_result_deserialization(self):
-        """Test TaskResult can be deserialized from JSON."""
-        json_data = {
-            "task_id": "test-004",
-            "status": "completed",
-            "created_at": "2025-01-31T10:00:00",
-            "retry_count": 0,
-            "artifacts": [],
-        }
-        result = TaskResult(**json_data)
-        assert result.task_id == "test-004"
-        assert result.status == TaskStatus.COMPLETED
+        assert result.stdout == "Some output"
+        assert result.stderr == "Error occurred"
+        assert result.error == "Task failed"
 
 
 class TestQueueState:
     """Tests for QueueState model."""
 
-    def test_queue_state_creation(self):
-        """Test QueueState creation."""
-        state = QueueState(
-            queue_size=5,
-            current_task="task-001.md",
-            is_processing=True,
-            queued_tasks=["task-002.md", "task-003.md", "task-004.md", "task-005.md"],
+    def test_create_empty_queue_state(self):
+        """Test creating an empty QueueState."""
+        state = QueueState()
+        assert state.queue == []
+        assert state.processing.is_processing is False
+        assert state.get_pending_count() == 0
+        assert state.get_running_count() == 0
+        assert state.get_completed_count() == 0
+        assert state.get_failed_count() == 0
+
+    def test_queue_state_counts(self):
+        """Test QueueState count methods."""
+        state = QueueState(queue=[
+            Task(task_id="t1", spec_file="t1.md", spec_dir_id="main", status=TaskStatus.PENDING),
+            Task(task_id="t2", spec_file="t2.md", spec_dir_id="main", status=TaskStatus.PENDING),
+            Task(task_id="t3", spec_file="t3.md", spec_dir_id="main", status=TaskStatus.RUNNING),
+            Task(task_id="t4", spec_file="t4.md", spec_dir_id="main", status=TaskStatus.COMPLETED),
+            Task(task_id="t5", spec_file="t5.md", spec_dir_id="main", status=TaskStatus.FAILED),
+        ])
+        assert state.get_pending_count() == 2
+        assert state.get_running_count() == 1
+        assert state.get_completed_count() == 1
+        assert state.get_failed_count() == 1
+
+    def test_get_next_pending(self):
+        """Test getting next pending task."""
+        state = QueueState(queue=[
+            Task(task_id="t1", spec_file="t1.md", spec_dir_id="main", status=TaskStatus.PENDING),
+            Task(task_id="t2", spec_file="t2.md", spec_dir_id="main", status=TaskStatus.RUNNING),
+            Task(task_id="t3", spec_file="t3.md", spec_dir_id="main", status=TaskStatus.PENDING),
+        ])
+        next_task = state.get_next_pending()
+        assert next_task is not None
+        assert next_task.task_id == "t1"
+
+
+class TestSpecDirectory:
+    """Tests for SpecDirectory model."""
+
+    def test_create_spec_directory(self, tmp_path):
+        """Test creating a SpecDirectory."""
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+
+        spec = SpecDirectory(
+            id="main",
+            path=str(spec_dir),
+            description="Main spec directory"
         )
-        assert state.queue_size == 5
-        assert state.current_task == "task-001.md"
-        assert state.is_processing is True
-        assert len(state.queued_tasks) == 4
+        assert spec.id == "main"
+        assert spec.description == "Main spec directory"
 
-    def test_queue_state_optional_fields(self):
-        """Test QueueState with optional fields."""
-        state = QueueState(
-            queue_size=0,
-            current_task=None,
-            is_processing=False,
-            queued_tasks=[],
+    def test_spec_directory_path_validation(self):
+        """Test SpecDirectory path validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            SpecDirectory(id="main", path="/nonexistent/path")
+        assert "does not exist" in str(exc_info.value).lower()
+
+
+class TestQueueConfig:
+    """Tests for QueueConfig model."""
+
+    def test_create_empty_config(self):
+        """Test creating an empty QueueConfig."""
+        config = QueueConfig()
+        assert config.project_path is None
+        assert config.spec_directories == []
+        assert config.settings.processing_interval == 10
+
+    def test_set_project_path(self, tmp_path):
+        """Test setting project path."""
+        config = QueueConfig()
+        config.set_project_path(str(tmp_path))
+        assert config.project_path == str(tmp_path.resolve())
+
+    def test_set_project_path_validation(self):
+        """Test project path validation."""
+        config = QueueConfig()
+        with pytest.raises(ValueError) as exc_info:
+            config.set_project_path("/nonexistent/path")
+        assert "does not exist" in str(exc_info.value).lower()
+
+    def test_add_spec_directory(self, tmp_path):
+        """Test adding a spec directory."""
+        config = QueueConfig()
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+
+        spec = config.add_spec_directory(
+            path=str(spec_dir),
+            id="main",
+            description="Test specs"
         )
-        assert state.queue_size == 0
-        assert state.current_task is None
-        assert state.is_processing is False
-        assert state.queued_tasks == []
+        assert spec.id == "main"
+        assert len(config.spec_directories) == 1
+
+    def test_add_duplicate_spec_directory(self, tmp_path):
+        """Test adding duplicate spec directory."""
+        config = QueueConfig()
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+
+        config.add_spec_directory(path=str(spec_dir), id="main")
+
+        with pytest.raises(ValueError) as exc_info:
+            config.add_spec_directory(path=str(spec_dir), id="main")
+        assert "already exists" in str(exc_info.value).lower()
+
+    def test_remove_spec_directory(self, tmp_path):
+        """Test removing a spec directory."""
+        config = QueueConfig()
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+
+        config.add_spec_directory(path=str(spec_dir), id="main")
+        assert len(config.spec_directories) == 1
+
+        result = config.remove_spec_directory("main")
+        assert result is True
+        assert len(config.spec_directories) == 0
+
+    def test_get_spec_directory(self, tmp_path):
+        """Test getting a spec directory."""
+        config = QueueConfig()
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+
+        config.add_spec_directory(path=str(spec_dir), id="main")
+        spec = config.get_spec_directory("main")
+        assert spec is not None
+        assert spec.id == "main"
+
+        spec = config.get_spec_directory("nonexistent")
+        assert spec is None
 
 
-class TestTaskInfo:
-    """Tests for TaskInfo model."""
+class TestQueueSettings:
+    """Tests for QueueSettings model."""
 
-    def test_job_info_creation(self):
-        """Test TaskInfo creation."""
-        info = TaskInfo(
-            task_id="info-001",
-            status=TaskStatus.QUEUED,
-            created_at=datetime.now(),
-            queue_position=3,
-        )
-        assert info.task_id == "info-001"
-        assert info.status == TaskStatus.QUEUED
-        assert info.queue_position == 3
-
-    def test_job_info_without_queue_position(self):
-        """Test TaskInfo without queue position."""
-        info = TaskInfo(
-            task_id="info-002",
-            status=TaskStatus.RUNNING,
-            created_at=datetime.now(),
-        )
-        assert info.task_id == "info-002"
-        assert info.status == TaskStatus.RUNNING
-        assert info.queue_position is None
+    def test_default_settings(self):
+        """Test default QueueSettings."""
+        settings = QueueSettings()
+        assert settings.processing_interval == 10
+        assert settings.batch_size == 10
+        assert settings.task_spec_pattern == "task-*.md"
+        assert settings.max_attempts == 3
+        assert settings.enable_file_hash is True
