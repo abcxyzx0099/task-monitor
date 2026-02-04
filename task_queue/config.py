@@ -7,7 +7,7 @@ Handles loading, saving, and updating queue configuration.
 from pathlib import Path
 from typing import Optional, List
 
-from task_queue.models import QueueConfig, SpecDirectory
+from task_queue.models import QueueConfig, TaskDocDirectory
 from task_queue.atomic import AtomicFileWriter, FileLock
 
 
@@ -96,65 +96,65 @@ class ConfigManager:
         self.config.project_path = None
         self.save_config()
 
-    # Spec directory management
+    # Task doc directory management
 
-    def add_spec_directory(
+    def add_task_doc_directory(
         self,
         path: str,
         id: str,
         description: str = ""
-    ) -> SpecDirectory:
+    ) -> TaskDocDirectory:
         """
-        Add a spec directory to monitor.
+        Add a task doc directory to monitor.
 
         Args:
-            path: Path to task specification directory
-            id: Unique identifier for this spec directory
+            path: Path to task document directory
+            id: Unique identifier for this task doc directory
             description: Optional description
 
         Returns:
-            The created SpecDirectory
+            The created TaskDocDirectory
 
         Raises:
             ValueError: If path doesn't exist or ID already exists
         """
-        spec_dir = self.config.add_spec_directory(
+        doc_dir = self.config.add_task_doc_directory(
             path=path,
             id=id,
             description=description
         )
         self.save_config()
-        return spec_dir
+        return doc_dir
 
-    def remove_spec_directory(self, spec_id: str) -> bool:
+    def remove_task_doc_directory(self, doc_id: str) -> bool:
         """
-        Remove a spec directory from monitoring.
+        Remove a task doc directory from monitoring.
 
         Args:
-            spec_id: Spec directory ID to remove
+            doc_id: Task doc directory ID to remove
 
         Returns:
             True if removed, False if not found
         """
-        result = self.config.remove_spec_directory(spec_id)
+        result = self.config.remove_task_doc_directory(doc_id)
 
         if result:
             self.save_config()
 
         return result
 
-    def list_spec_directories(self) -> List[SpecDirectory]:
+    def list_task_doc_directories(self) -> List[TaskDocDirectory]:
         """
-        List configured spec directories.
+        List configured task doc directories.
 
         Returns:
-            List of spec directories
+            List of task doc directories
         """
-        return self.config.spec_directories
+        return self.config.task_doc_directories
 
-    def get_spec_directory(self, spec_id: str) -> Optional[SpecDirectory]:
-        """Get spec directory by ID."""
-        return self.config.get_spec_directory(spec_id)
+    def get_task_doc_directory(self, doc_id: str) -> Optional[TaskDocDirectory]:
+        """Get task doc directory by ID."""
+        return self.config.get_task_doc_directory(doc_id)
 
     # Settings management
 

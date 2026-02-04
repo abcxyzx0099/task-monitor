@@ -81,18 +81,18 @@ class TaskProcessor:
         self.state.updated_at = datetime.now().isoformat()
         AtomicFileWriter.write_json(self.state_file, self.state.model_dump(), indent=2)
 
-    def load_tasks(self, spec_dirs: List) -> int:
+    def load_tasks(self, doc_dirs: List) -> int:
         """
-        Scan spec directories and add new tasks to queue.
+        Scan task doc directories and add new tasks to queue.
 
         Args:
-            spec_dirs: List of SpecDirectory configurations
+            doc_dirs: List of TaskDocDirectory configurations
 
         Returns:
             Number of new tasks discovered
         """
-        # Scan all spec directories
-        discovered = self.scanner.scan_spec_directories(spec_dirs)
+        # Scan all task doc directories
+        discovered = self.scanner.scan_task_doc_directories(doc_dirs)
 
         new_count = 0
 
@@ -122,7 +122,7 @@ class TaskProcessor:
             if task.task_id == discovered.task_id:
                 # Update file hash if changed
                 if self.scanner.is_file_modified(
-                    discovered.spec_file,
+                    discovered.task_doc_file,
                     task.file_hash
                 ):
                     task.file_hash = discovered.file_hash
@@ -140,8 +140,8 @@ class TaskProcessor:
         # Add new task to queue
         task = Task(
             task_id=discovered.task_id,
-            spec_file=str(discovered.spec_file),
-            spec_dir_id=discovered.spec_dir_id,
+            task_doc_file=str(discovered.task_doc_file),
+            task_doc_dir_id=discovered.task_doc_dir_id,
             source="load",
             file_hash=discovered.file_hash,
             file_size=discovered.file_size
@@ -259,9 +259,9 @@ class TaskProcessor:
 
             self.state.statistics.last_processed_at = result.completed_at
 
-            # Archive completed task spec
+            # Archive completed task doc
             if result.status == TaskStatus.COMPLETED:
-                self._archive_task_spec(task)
+                self._archive_task_doc(task)
 
         except Exception as e:
             task.status = TaskStatus.FAILED
@@ -276,25 +276,25 @@ class TaskProcessor:
 
         return task.status
 
-    def _archive_task_spec(self, task: Task) -> None:
+    def _archive_task_doc(self, task: Task) -> None:
         """
-        Move completed task spec to archive.
+        Move completed task doc to archive.
 
         Args:
             task: Completed task
         """
-        spec_file = Path(task.spec_file)
+        doc_file = Path(task.task_doc_file)
 
-        if not spec_file.exists():
+        if not doc_file.exists():
             return
 
         # Move file
-        target = self.archive_dir / spec_file.name
+        target = self.archive_dir / doc_file.name
 
         try:
-            shutil.move(str(spec_file), str(target))
+            shutil.move(str(doc_file), str(target))
         except Exception as e:
-            print(f"  ⚠️  Could not archive {spec_file.name}: {e}")
+            print(f"  ⚠️  Could not archive {doc_file.name}: {e}")
 
     def get_status(self) -> dict:
         """Get current status."""

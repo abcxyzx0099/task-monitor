@@ -10,7 +10,7 @@ from typing import Optional, Dict, List
 from datetime import datetime
 
 from task_queue.models import (
-    QueueConfig, SystemStatus, SpecDirectoryStatus
+    QueueConfig, SystemStatus, TaskDocDirectoryStatus
 )
 from task_queue.config import ConfigManager
 from task_queue.scanner import TaskScanner
@@ -21,7 +21,7 @@ class TaskQueue:
     """
     Task monitor for single project path.
 
-    Manages task loading from multiple spec directories
+    Manages task loading from multiple task doc directories
     and sequential execution.
     """
 
@@ -73,10 +73,10 @@ class TaskQueue:
 
     def load_tasks(self) -> Dict[str, int]:
         """
-        Load tasks from configured spec directories.
+        Load tasks from configured task doc directories.
 
         Returns:
-            Dict mapping spec_dir_id to new task count
+            Dict mapping task_doc_dir_id to new task count
         """
         processor = self.get_processor()
 
@@ -84,21 +84,21 @@ class TaskQueue:
             print("⚠️  No project path set. Use 'task-queue' set-project <path>'")
             return {}
 
-        print(f"\n📂 Scanning spec directories...")
+        print(f"\n📂 Scanning task doc directories...")
 
-        spec_dirs = self.config_manager.config.spec_directories
+        doc_dirs = self.config_manager.config.task_doc_directories
 
-        if not spec_dirs:
-            print("⚠️  No spec directories configured. Use 'task-queue' add-spec <path>'")
+        if not doc_dirs:
+            print("⚠️  No task doc directories configured. Use 'task-queue' add-doc <path>'")
             return {}
 
-        for spec_dir in spec_dirs:
-            print(f"  - {spec_dir.id}: {spec_dir.path}")
+        for doc_dir in doc_dirs:
+            print(f"  - {doc_dir.id}: {doc_dir.path}")
 
         print()
 
-        # Load tasks (processor scans all spec directories)
-        new_count = processor.load_tasks(spec_dirs)
+        # Load tasks (processor scans all task doc directories)
+        new_count = processor.load_tasks(doc_dirs)
 
         self._load_count += 1
         self._last_load = datetime.now()
@@ -180,7 +180,7 @@ class TaskQueue:
 
         print(f"\n🎯 Task Queue Started")
         print(f"   Project: {self.config_manager.config.project_path}")
-        print(f"   Spec directories: {len(self.config_manager.config.spec_directories)}")
+        print(f"   Task doc directories: {len(self.config_manager.config.task_doc_directories)}")
         print(f"   Interval: {processing_interval}s")
         print(f"   Cycles: {'infinite' if cycles is None else cycles}")
 
@@ -230,9 +230,9 @@ class TaskQueue:
         # Project info
         status.project_path = self.config_manager.config.project_path
 
-        # Spec directories
-        status.total_spec_dirs = len(self.config_manager.config.spec_directories)
-        status.active_spec_dirs = len(self.config_manager.config.spec_directories)
+        # Task doc directories
+        status.total_task_doc_dirs = len(self.config_manager.config.task_doc_directories)
+        status.active_task_doc_dirs = len(self.config_manager.config.task_doc_directories)
 
         # Queue stats
         processor = self.get_processor()
@@ -247,25 +247,25 @@ class TaskQueue:
 
         return status
 
-    def get_spec_directory_status(self) -> List[SpecDirectoryStatus]:
-        """Get status for all spec directories."""
+    def get_task_doc_directory_status(self) -> List[TaskDocDirectoryStatus]:
+        """Get status for all task doc directories."""
         statuses = []
 
-        for spec_dir in self.config_manager.config.spec_directories:
+        for doc_dir in self.config_manager.config.task_doc_directories:
             queue_stats = {}
 
-            # Count tasks from this spec directory
+            # Count tasks from this task doc directory
             processor = self.get_processor()
             if processor:
                 for task in processor.state.queue:
-                    if task.spec_dir_id == spec_dir.id:
+                    if task.task_doc_dir_id == doc_dir.id:
                         st = task.status.value
                         queue_stats[st] = queue_stats.get(st, 0) + 1
 
-            statuses.append(SpecDirectoryStatus(
-                id=spec_dir.id,
-                path=spec_dir.path,
-                description=spec_dir.description,
+            statuses.append(TaskDocDirectoryStatus(
+                id=doc_dir.id,
+                path=doc_dir.path,
+                description=doc_dir.description,
                 queue_stats=queue_stats
             ))
 

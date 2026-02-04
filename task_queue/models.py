@@ -31,12 +31,12 @@ class Task(BaseModel):
     """
     A task in the queue.
 
-    Represents a single task specification waiting to be executed.
+    Represents a single task document waiting to be executed.
     """
 
     task_id: str = Field(..., description="Unique task identifier (task-YYYYMMDD-HHMMSS-description)")
-    spec_file: str = Field(..., description="Path to task specification file")
-    spec_dir_id: str = Field(..., description="ID of spec directory where task was found")
+    task_doc_file: str = Field(..., description="Path to task document file")
+    task_doc_dir_id: str = Field(..., description="ID of task doc directory where task was found")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current task status")
     source: TaskSource = Field(default=TaskSource.LOAD, description="How task was discovered")
 
@@ -62,8 +62,8 @@ class TaskResult(BaseModel):
     """
 
     task_id: str
-    spec_file: str
-    spec_dir_id: str = ""
+    task_doc_file: str
+    task_doc_dir_id: str = ""
     status: TaskStatus
 
     # Execution details
@@ -152,16 +152,16 @@ class QueueState(BaseModel):
         return None
 
 
-class SpecDirectory(BaseModel):
+class TaskDocDirectory(BaseModel):
     """
-    Configuration for a monitored task specification directory.
+    Configuration for a monitored task document directory.
 
-    Defines where to scan for task specification files.
+    Defines where to scan for task document files.
     """
 
-    id: str = Field(..., description="Unique identifier for this spec directory")
-    path: str = Field(..., description="Path to task specification directory")
-    description: str = Field(default="", description="Description of this spec directory")
+    id: str = Field(..., description="Unique identifier for this task doc directory")
+    path: str = Field(..., description="Path to task document directory")
+    description: str = Field(default="", description="Description of this task doc directory")
 
     # Metadata
     added_at: str = Field(default_factory=lambda: datetime.now().isoformat())
@@ -172,7 +172,7 @@ class SpecDirectory(BaseModel):
         """Validate and resolve path."""
         path = Path(v).resolve()
         if not path.exists():
-            raise ValueError(f"Spec directory does not exist: {path}")
+            raise ValueError(f"Task doc directory does not exist: {path}")
         if not path.is_dir():
             raise ValueError(f"Path is not a directory: {path}")
         return str(path)
@@ -183,7 +183,7 @@ class QueueSettings(BaseModel):
 
     processing_interval: int = Field(default=10, description="Seconds between processing cycles")
     batch_size: int = Field(default=10, description="Max tasks to process per cycle")
-    task_spec_pattern: str = Field(default="task-*.md", description="Pattern for task spec files")
+    task_doc_pattern: str = Field(default="task-*.md", description="Pattern for task doc files")
 
     # Retry settings
     max_attempts: int = Field(default=3, description="Max execution attempts per task")
@@ -196,7 +196,7 @@ class QueueConfig(BaseModel):
     """
     Complete monitor configuration.
 
-    Single project path + Multiple spec directories.
+    Single project path + Multiple task doc directories.
     """
 
     version: str = "1.0"
@@ -205,18 +205,18 @@ class QueueConfig(BaseModel):
     # Single project path
     project_path: Optional[str] = Field(default=None, description="Path to project root (used as cwd)")
 
-    # Multiple spec directories to scan
-    spec_directories: List[SpecDirectory] = Field(default_factory=list)
+    # Multiple task doc directories to scan
+    task_doc_directories: List[TaskDocDirectory] = Field(default_factory=list)
 
     # Metadata
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
-    def get_spec_directory(self, spec_id: str) -> Optional[SpecDirectory]:
-        """Get spec directory by ID."""
-        for spec_dir in self.spec_directories:
-            if spec_dir.id == spec_id:
-                return spec_dir
+    def get_task_doc_directory(self, doc_id: str) -> Optional[TaskDocDirectory]:
+        """Get task doc directory by ID."""
+        for doc_dir in self.task_doc_directories:
+            if doc_dir.id == doc_id:
+                return doc_dir
         return None
 
     def set_project_path(self, path: str) -> None:
@@ -229,33 +229,33 @@ class QueueConfig(BaseModel):
         self.project_path = str(path_obj)
         self.updated_at = datetime.now().isoformat()
 
-    def add_spec_directory(
+    def add_task_doc_directory(
         self,
         path: str,
         id: str,
         description: str = ""
-    ) -> SpecDirectory:
-        """Add a spec directory to configuration."""
+    ) -> TaskDocDirectory:
+        """Add a task doc directory to configuration."""
         # Check for duplicate ID
-        if self.get_spec_directory(id):
-            raise ValueError(f"Spec directory ID already exists: {id}")
+        if self.get_task_doc_directory(id):
+            raise ValueError(f"Task doc directory ID already exists: {id}")
 
-        spec_dir = SpecDirectory(
+        doc_dir = TaskDocDirectory(
             id=id,
             path=path,
             description=description
         )
 
-        self.spec_directories.append(spec_dir)
+        self.task_doc_directories.append(doc_dir)
         self.updated_at = datetime.now().isoformat()
 
-        return spec_dir
+        return doc_dir
 
-    def remove_spec_directory(self, spec_id: str) -> bool:
-        """Remove a spec directory by ID."""
-        for i, spec_dir in enumerate(self.spec_directories):
-            if spec_dir.id == spec_id:
-                self.spec_directories.pop(i)
+    def remove_task_doc_directory(self, doc_id: str) -> bool:
+        """Remove a task doc directory by ID."""
+        for i, doc_dir in enumerate(self.task_doc_directories):
+            if doc_dir.id == doc_id:
+                self.task_doc_directories.pop(i)
                 self.updated_at = datetime.now().isoformat()
                 return True
         return False
@@ -265,12 +265,12 @@ class DiscoveredTask(BaseModel):
     """
     A task discovered by the scanner.
 
-    Represents a task specification file found during scanning.
+    Represents a task document file found during scanning.
     """
 
     task_id: str
-    spec_file: Path
-    spec_dir_id: str
+    task_doc_file: Path
+    task_doc_dir_id: str
     file_hash: Optional[str] = None
     file_size: int = 0
     discovered_at: str = Field(default_factory=lambda: datetime.now().isoformat())
@@ -287,9 +287,9 @@ class SystemStatus(BaseModel):
     # Project info
     project_path: Optional[str] = None
 
-    # Spec directories
-    total_spec_dirs: int = 0
-    active_spec_dirs: int = 0
+    # Task doc directories
+    total_task_doc_dirs: int = 0
+    active_task_doc_dirs: int = 0
 
     # Queue stats
     total_pending: int = 0
@@ -298,14 +298,14 @@ class SystemStatus(BaseModel):
     total_failed: int = 0
 
 
-class SpecDirectoryStatus(BaseModel):
-    """Status of a single spec directory."""
+class TaskDocDirectoryStatus(BaseModel):
+    """Status of a single task doc directory."""
 
     id: str
     path: str
     description: str
 
-    # Queue stats for this spec directory
+    # Queue stats for this task doc directory
     queue_stats: Dict[str, int] = Field(default_factory=dict)
 
 

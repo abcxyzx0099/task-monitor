@@ -61,62 +61,62 @@ def cmd_show_project(args, config: ConfigManager) -> int:
     return 0
 
 
-def cmd_add_spec(args, config: ConfigManager) -> int:
-    """Add a spec directory."""
+def cmd_add_doc(args, config: ConfigManager) -> int:
+    """Add a task doc directory."""
     try:
-        spec_dir = config.add_spec_directory(
+        doc_dir = config.add_task_doc_directory(
             path=args.path,
             id=args.id,
             description=args.description or ""
         )
 
-        print(f"✅ Added spec directory: {spec_dir.id}")
-        print(f"   Path: {spec_dir.path}")
-        if spec_dir.description:
-            print(f"   Description: {spec_dir.description}")
+        print(f"✅ Added task doc directory: {doc_dir.id}")
+        print(f"   Path: {doc_dir.path}")
+        if doc_dir.description:
+            print(f"   Description: {doc_dir.description}")
 
         return 0
 
     except Exception as e:
-        print(f"❌ Error adding spec directory: {e}", file=sys.stderr)
+        print(f"❌ Error adding task doc directory: {e}", file=sys.stderr)
         return 1
 
 
-def cmd_remove_spec(args, config: ConfigManager) -> int:
-    """Remove a spec directory."""
-    if config.remove_spec_directory(args.id):
-        print(f"✅ Removed spec directory: {args.id}")
+def cmd_remove_doc(args, config: ConfigManager) -> int:
+    """Remove a task doc directory."""
+    if config.remove_task_doc_directory(args.id):
+        print(f"✅ Removed task doc directory: {args.id}")
         return 0
     else:
-        print(f"❌ Spec directory not found: {args.id}", file=sys.stderr)
+        print(f"❌ Task doc directory not found: {args.id}", file=sys.stderr)
         return 1
 
 
-def cmd_list_specs(args, config: ConfigManager) -> int:
-    """List spec directories."""
-    spec_dirs = config.list_spec_directories()
+def cmd_list_docs(args, config: ConfigManager) -> int:
+    """List task doc directories."""
+    doc_dirs = config.list_task_doc_directories()
 
-    if not spec_dirs:
-        print("⚠️  No spec directories configured")
+    if not doc_dirs:
+        print("⚠️  No task doc directories configured")
         return 0
 
-    print(f"\n📂 Spec Directories:")
+    print(f"\n📂 Task Doc Directories:")
     print()
 
-    for spec_dir in spec_dirs:
-        print(f"  📁 {spec_dir.id}")
-        print(f"      Path: {spec_dir.path}")
-        if spec_dir.description:
-            print(f"      Description: {spec_dir.description}")
+    for doc_dir in doc_dirs:
+        print(f"  📁 {doc_dir.id}")
+        print(f"      Path: {doc_dir.path}")
+        if doc_dir.description:
+            print(f"      Description: {doc_dir.description}")
 
         # Get current status if available
         try:
             monitor = create_queue(config_file=config.config_file)
-            spec_statuses = monitor.get_spec_directory_status()
+            doc_statuses = monitor.get_task_doc_directory_status()
 
-            for spec_status in spec_statuses:
-                if spec_status.id == spec_dir.id:
-                    queue = spec_status.queue_stats
+            for doc_status in doc_statuses:
+                if doc_status.id == doc_dir.id:
+                    queue = doc_status.queue_stats
                     if queue:
                         print(f"      Queue: {queue}")
                     break
@@ -155,8 +155,8 @@ def cmd_status(args, config: ConfigManager) -> int:
         # Project
         print(f"\nProject path: {status.project_path or 'Not set'}")
 
-        # Spec directories
-        print(f"\nSpec directories: {status.active_spec_dirs}/{status.total_spec_dirs} active")
+        # Task doc directories
+        print(f"\nTask doc directories: {status.active_task_doc_dirs}/{status.total_task_doc_dirs} active")
 
         # Queue stats
         print(f"\n📋 Queue Statistics:")
@@ -165,19 +165,19 @@ def cmd_status(args, config: ConfigManager) -> int:
         print(f"   Completed: {status.total_completed}")
         print(f"   Failed:    {status.total_failed}")
 
-        # Spec directory details
+        # Task doc directory details
         if args.verbose:
             print(f"\n{'='*60}")
-            print(f"📂 Spec Directory Details")
+            print(f"📂 Task Doc Directory Details")
             print(f"{'='*60}")
 
-            for spec_status in monitor.get_spec_directory_status():
-                print(f"\n{spec_status.id}:")
-                print(f"   Path: {spec_status.path}")
-                if spec_status.description:
-                    print(f"   Description: {spec_status.description}")
+            for doc_status in monitor.get_task_doc_directory_status():
+                print(f"\n{doc_status.id}:")
+                print(f"   Path: {doc_status.path}")
+                if doc_status.description:
+                    print(f"   Description: {doc_status.description}")
 
-                queue = spec_status.queue_stats
+                queue = doc_status.queue_stats
                 if queue:
                     print(f"   Queue: {queue}")
 
@@ -197,7 +197,7 @@ def cmd_queue(args, config: ConfigManager) -> int:
         status = monitor.get_status()
 
         print(f"\nProject: {status.project_path or 'Not set'}")
-        print(f"Spec directories: {status.active_spec_dirs}/{status.total_spec_dirs} active")
+        print(f"Task doc directories: {status.active_task_doc_dirs}/{status.total_task_doc_dirs} active")
 
         print(f"\n📋 Queue Statistics:")
         print(f"   Pending:   {status.total_pending}")
@@ -205,16 +205,16 @@ def cmd_queue(args, config: ConfigManager) -> int:
         print(f"   Completed: {status.total_completed}")
         print(f"   Failed:    {status.total_failed}")
 
-        # Show spec directory breakdown
-        for spec_status in monitor.get_spec_directory_status():
-            queue = spec_status.queue_stats
+        # Show task doc directory breakdown
+        for doc_status in monitor.get_task_doc_directory_status():
+            queue = doc_status.queue_stats
             pending = queue.get("pending", 0)
             running = queue.get("running", 0)
             completed = queue.get("completed", 0)
             failed = queue.get("failed", 0)
 
             if pending + running + completed + failed > 0:
-                print(f"\n{spec_status.id}:")
+                print(f"\n{doc_status.id}:")
                 print(f"   Pending: {pending}, Running: {running}, Completed: {completed}, Failed: {failed}")
 
         print()
@@ -227,7 +227,7 @@ def cmd_queue(args, config: ConfigManager) -> int:
 
 
 def cmd_load(args, config: ConfigManager) -> int:
-    """Load tasks from spec directories."""
+    """Load tasks from task doc directories."""
     try:
         monitor = create_queue(config_file=config.config_file)
 
@@ -315,11 +315,11 @@ Examples:
   # Set project path
   task-queue set-project /path/to/project
 
-  # Add spec directory
-  task-queue add-spec /path/to/specs --id main
+  # Add task doc directory
+  task-queue add-doc /path/to/docs --id main
 
-  # List spec directories
-  task-queue list-specs
+  # List task doc directories
+  task-queue list-docs
 
   # Load tasks
   task-queue load
@@ -348,16 +348,16 @@ Examples:
     subparsers.add_parser("clear-project", help="Clear project path")
     subparsers.add_parser("show-project", help="Show current project path")
 
-    # Spec directory commands
-    spec_parser = subparsers.add_parser("add-spec", help="Add spec directory")
-    spec_parser.add_argument("path", help="Path to spec directory")
-    spec_parser.add_argument("--id", required=True, help="Unique identifier")
-    spec_parser.add_argument("--description", default="", help="Description")
+    # Task doc directory commands
+    doc_parser = subparsers.add_parser("add-doc", help="Add task doc directory")
+    doc_parser.add_argument("path", help="Path to task doc directory")
+    doc_parser.add_argument("--id", required=True, help="Unique identifier")
+    doc_parser.add_argument("--description", default="", help="Description")
 
-    remove_spec_parser = subparsers.add_parser("remove-spec", help="Remove spec directory")
-    remove_spec_parser.add_argument("id", help="Spec directory ID")
+    remove_doc_parser = subparsers.add_parser("remove-doc", help="Remove task doc directory")
+    remove_doc_parser.add_argument("id", help="Task doc directory ID")
 
-    list_specs_parser = subparsers.add_parser("list-specs", help="List spec directories")
+    list_docs_parser = subparsers.add_parser("list-docs", help="List task doc directories")
 
     # Status and queue
     status_parser = subparsers.add_parser("status", help="Show system status")
@@ -366,7 +366,7 @@ Examples:
     subparsers.add_parser("queue", help="Show queue status")
 
     # Load and process
-    subparsers.add_parser("load", help="Load tasks from spec directories")
+    subparsers.add_parser("load", help="Load tasks from task doc directories")
 
     process_parser = subparsers.add_parser("process", help="Process pending tasks")
     process_parser.add_argument(
@@ -405,9 +405,9 @@ def main() -> int:
         ("set-project",): cmd_set_project,
         ("clear-project",): cmd_clear_project,
         ("show-project",): cmd_show_project,
-        ("add-spec",): cmd_add_spec,
-        ("remove-spec",): cmd_remove_spec,
-        ("list-specs",): cmd_list_specs,
+        ("add-doc",): cmd_add_doc,
+        ("remove-doc",): cmd_remove_doc,
+        ("list-docs",): cmd_list_docs,
         ("status",): cmd_status,
         ("queue",): cmd_queue,
         ("load",): cmd_load,

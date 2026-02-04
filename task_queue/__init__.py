@@ -1,7 +1,7 @@
 """
-Task Queue - Single project path, multiple spec directories queue system.
+Task Queue - Single project path, multiple task doc directories queue system.
 
-Loads tasks from configured spec directories and executes them
+Loads tasks from configured task doc directories and executes them
 via Claude Agent SDK with the /task-worker skill.
 """
 
@@ -14,15 +14,16 @@ from task_queue.models import (
     TaskResult,
     QueueState,
     Statistics as _Statistics,
-    SpecDirectory,
+    TaskDocDirectory,
     QueueConfig,
     QueueSettings,
     DiscoveredTask,
     SystemStatus,
-    SpecDirectoryStatus,
+    TaskDocDirectoryStatus,
 )
 
 # Backward compatibility alias
+Statistics = _Statistics
 ProjectStatistics = _Statistics
 
 from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
@@ -39,12 +40,12 @@ __all__ = [
     "TaskResult",
     "QueueState",
     "Statistics",
-    "SpecDirectory",
+    "TaskDocDirectory",
     "QueueConfig",
     "QueueSettings",
     "DiscoveredTask",
     "SystemStatus",
-    "SpecDirectoryStatus",
+    "TaskDocDirectoryStatus",
     "ProjectStatistics",
     # Config
     "ConfigManager",

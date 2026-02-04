@@ -1,19 +1,19 @@
 """
-Task specification scanner.
+Task document scanner.
 
-Automatically discovers task specification files in configured directories.
+Automatically discovers task document files in configured directories.
 """
 
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
-from task_queue.models import DiscoveredTask, SpecDirectory
+from task_queue.models import DiscoveredTask, TaskDocDirectory
 
 
 class TaskScanner:
     """
-    Scans directories for task specification files.
+    Scans directories for task document files.
 
     Auto-discovers task-*.md files and tracks them by file hash
     for change detection.
@@ -28,60 +28,60 @@ class TaskScanner:
         """
         self.enable_file_hash = enable_file_hash
 
-    def scan_spec_directory(self, spec_dir: SpecDirectory) -> List[DiscoveredTask]:
+    def scan_task_doc_directory(self, doc_dir: TaskDocDirectory) -> List[DiscoveredTask]:
         """
-        Scan a single spec directory for task specifications.
+        Scan a single task doc directory for task documents.
 
         Args:
-            spec_dir: Spec directory configuration
+            doc_dir: Task doc directory configuration
 
         Returns:
             List of discovered tasks
         """
         discovered = []
-        spec_path = Path(spec_dir.path)
+        doc_path = Path(doc_dir.path)
 
-        if not spec_path.exists():
+        if not doc_path.exists():
             return discovered
 
         # Find all task-*.md files
-        for filepath in self._find_task_files(spec_path):
-            task = self._create_discovered_task(filepath, spec_dir.id)
+        for filepath in self._find_task_files(doc_path):
+            task = self._create_discovered_task(filepath, doc_dir.id)
             if task:
                 discovered.append(task)
 
         return discovered
 
-    def scan_spec_directories(self, spec_dirs: List[SpecDirectory]) -> List[DiscoveredTask]:
+    def scan_task_doc_directories(self, doc_dirs: List[TaskDocDirectory]) -> List[DiscoveredTask]:
         """
-        Scan multiple spec directories for task specifications.
+        Scan multiple task doc directories for task documents.
 
         Args:
-            spec_dirs: List of spec directory configurations
+            doc_dirs: List of task doc directory configurations
 
         Returns:
             List of discovered tasks from all directories
         """
         discovered = []
 
-        for spec_dir in spec_dirs:
-            discovered.extend(self.scan_spec_directory(spec_dir))
+        for doc_dir in doc_dirs:
+            discovered.extend(self.scan_task_doc_directory(doc_dir))
 
         return discovered
 
-    def _find_task_files(self, spec_dir: Path) -> List[Path]:
+    def _find_task_files(self, doc_dir: Path) -> List[Path]:
         """
-        Find all task specification files in directory.
+        Find all task document files in directory.
 
         Args:
-            spec_dir: Directory to scan
+            doc_dir: Directory to scan
 
         Returns:
             List of task file paths
         """
         task_files = []
 
-        for filepath in spec_dir.glob("task-*.md"):
+        for filepath in doc_dir.glob("task-*.md"):
             if filepath.is_file():
                 task_files.append(filepath)
 
@@ -90,14 +90,14 @@ class TaskScanner:
     def _create_discovered_task(
         self,
         filepath: Path,
-        spec_dir_id: str
+        task_doc_dir_id: str
     ) -> Optional[DiscoveredTask]:
         """
         Create a DiscoveredTask from a file path.
 
         Args:
-            filepath: Path to task specification file
-            spec_dir_id: ID of the spec directory
+            filepath: Path to task document file
+            task_doc_dir_id: ID of the task doc directory
 
         Returns:
             DiscoveredTask or None if invalid
@@ -124,8 +124,8 @@ class TaskScanner:
 
         return DiscoveredTask(
             task_id=task_id,
-            spec_file=filepath,
-            spec_dir_id=spec_dir_id,
+            task_doc_file=filepath,
+            task_doc_dir_id=task_doc_dir_id,
             file_hash=file_hash,
             file_size=file_size,
             discovered_at=datetime.now().isoformat()

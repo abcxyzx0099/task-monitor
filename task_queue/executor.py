@@ -47,7 +47,7 @@ class TaskExecutor:
         self.project_root = Path(project_root).resolve()
 
         # Source directories
-        self.specs_dir = self.project_root / task_documents_path
+        self.task_docs_dir = self.project_root / task_documents_path
 
         # Output directories
         self.reports_dir = self.project_root / task_reports_path
@@ -71,20 +71,20 @@ class TaskExecutor:
         """
         task_id = task.task_id
 
-        # Get task spec path
-        if Path(task.spec_file).is_absolute:
-            task_path = Path(task.spec_file)
+        # Get task doc path
+        if Path(task.task_doc_file).is_absolute:
+            task_path = Path(task.task_doc_file)
         else:
-            task_path = self.project_root / task.spec_file
+            task_path = self.project_root / task.task_doc_file
 
         if not task_path.exists():
-            raise FileNotFoundError(f"Task specification not found: {task_path}")
+            raise FileNotFoundError(f"Task document not found: {task_path}")
 
         # Calculate relative path from project root
         relative_task_path = task_path.relative_to(self.project_root)
 
         logger.info(f"[{task_id}] Task started")
-        logger.info(f"[{task_id}] Spec: {relative_task_path}")
+        logger.info(f"[{task_id}] Task doc: {relative_task_path}")
 
         # Configure SDK with system_prompt to enforce coordinator behavior
         options = ClaudeAgentOptions(
@@ -102,7 +102,7 @@ CRITICAL RULES:
 4. DO NOT think "this is simple, I'll do it myself" - ALWAYS use Task tool
 
 Your workflow for the task-worker skill:
-1. Read the task specification document
+1. Read the task document
 2. Spawn Implementation Agent: Use Task tool with subagent_type="general-purpose"
    - description: "Execute the task"
    - prompt: [full task document content]
@@ -120,8 +120,8 @@ You MUST use the Task tool for ALL implementation. DO NOT take shortcuts.
         start_time = datetime.now()
         result = TaskResult(
             task_id=task_id,
-            spec_file=str(task_path),
-            spec_dir_id=task.spec_dir_id,
+            task_doc_file=str(task_path),
+            task_doc_dir_id=task.task_doc_dir_id,
             status=TaskStatus.RUNNING,
             started_at=start_time.isoformat(),
             completed_at=None,
@@ -133,7 +133,7 @@ You MUST use the Task tool for ALL implementation. DO NOT take shortcuts.
         full_output = []
 
         try:
-            # Invoke /task-worker skill with task specification path
+            # Invoke /task-worker skill with task document path
             q = query(
                 prompt=f"""/task-worker
 
@@ -187,8 +187,8 @@ Execute task at: {relative_task_path}
             # Save result
             self._save_result(result)
 
-            # Archive task specification
-            self._archive_task_spec(task_path)
+            # Archive task document
+            self._archive_task_doc(task_path)
 
         except asyncio.CancelledError:
             logger.info(f"[{task_id}] Task cancelled")
@@ -198,7 +198,7 @@ Execute task at: {relative_task_path}
                 result.duration_seconds = (datetime.now() - start_time).total_seconds()
                 result.error = "Task cancelled"
                 self._save_result(result)
-                self._archive_task_spec(task_path)
+                self._archive_task_doc(task_path)
             raise
 
         except Exception as e:
@@ -209,7 +209,7 @@ Execute task at: {relative_task_path}
                 result.error = f"{type(e).__name__}: {str(e)}"
                 logger.error(f"[{task_id}] Task exception: {result.error}")
                 self._save_result(result)
-                self._archive_task_spec(task_path)
+                self._archive_task_doc(task_path)
 
         return result
 
@@ -223,8 +223,8 @@ Execute task at: {relative_task_path}
         )
         logger.info(f"[{result.task_id}] Result saved: {output_file}")
 
-    def _archive_task_spec(self, task_path: Path):
-        """Move completed task specification to archive."""
+    def _archive_task_doc(self, task_path: Path):
+        """Move completed task document to archive."""
         if task_path.exists():
             # Get just the filename
             task_file = task_path.name

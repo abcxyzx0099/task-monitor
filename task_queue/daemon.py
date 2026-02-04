@@ -88,14 +88,14 @@ class TaskMonitorDaemon:
 
         # Log configuration
         config = self.monitor.config_manager.config
-        spec_dirs = config.spec_directories
+        doc_dirs = config.task_doc_directories
 
         logger.info(f"Configuration loaded from: {self.config_file}")
         logger.info(f"Project path: {config.project_path}")
-        logger.info(f"Spec directories: {len(spec_dirs)}")
+        logger.info(f"Task doc directories: {len(doc_dirs)}")
 
-        for spec_dir in spec_dirs:
-            logger.info(f"  - {spec_dir.id}: {spec_dir.path}")
+        for doc_dir in doc_dirs:
+            logger.info(f"  - {doc_dir.id}: {doc_dir.path}")
 
         logger.info(f"Processing interval: {config.settings.processing_interval}s")
 
