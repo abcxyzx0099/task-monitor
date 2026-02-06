@@ -57,30 +57,6 @@ class TestPickNextTask:
         task_names = [t.name for t in tasks]
         assert task_names == sorted(task_names)
 
-    def test_pick_next_task_from_source_with_running_marker(self, project_root):
-        """Test that tasks with .running markers are skipped."""
-        runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
-            id="test",
-            path=str(project_root / "tasks" / "task-documents")
-        )
-
-        # Create a task with a running marker
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = project_root / "tasks" / "task-documents" / f"task-{timestamp}-test.md"
-        task_file.write_text("# Test task")
-
-        # Create running marker with fake PID (non-existent process)
-        running_marker = task_file.parent / f".{task_file.stem}.running"
-        running_marker.write_text("process_id:99999:hostname\n")
-
-        # Pick task - should skip the running one and clean up stale marker
-        task = runner.pick_next_task_from_source(source_dir)
-
-        # With fake PID, the stale marker should be cleaned and task returned
-        assert task is not None
-        assert task.name == task_file.name
-
     def test_pick_next_task_from_multiple_sources(self, project_root):
         """Test picking tasks from multiple sources."""
         # Create two source directories
@@ -109,30 +85,6 @@ class TestPickNextTask:
 
 class TestExecuteTask:
     """Tests for execute_task method."""
-
-    def test_execute_task_creates_running_marker(self, project_root):
-        """Test that execute_task creates a .running marker."""
-        runner = TaskRunner(str(project_root))
-
-        # Create a task file
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = project_root / "tasks" / "task-documents" / f"task-{timestamp}-test.md"
-        task_file.write_text("# Test task")
-
-        # Mock the executor to return success
-        with patch.object(runner.executor, 'execute') as mock_execute:
-            from task_queue.executor import ExecutionResult
-            mock_execute.return_value = ExecutionResult(
-                success=True,
-                task_id=task_file.stem,
-                output="Done"
-            )
-
-            result = runner.execute_task(task_file)
-
-            # Check running marker was created
-            running_marker = task_file.parent / f".{task_file.stem}.running"
-            assert not running_marker.exists()  # Should be cleaned up after execution
 
     def test_execute_task_moves_to_archive_on_success(self, project_root):
         """Test that successful tasks are moved to archive."""
@@ -203,7 +155,6 @@ class TestGetStatus:
         status = runner.get_status([source_dir])
 
         assert status['pending'] == 0
-        assert status['running'] == 0
         assert status['completed'] == 0
         assert status['failed'] == 0
 
@@ -218,30 +169,7 @@ class TestGetStatus:
         status = runner.get_status([source_dir])
 
         assert status['pending'] == 3
-        assert status['running'] == 0
         assert 'test' in status['sources']
-
-    def test_get_status_with_running_tasks(self, project_root):
-        """Test status with running tasks."""
-        runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
-            id="test",
-            path=str(project_root / "tasks" / "task-documents")
-        )
-
-        # Create a task with running marker
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = project_root / "tasks" / "task-documents" / f"task-{timestamp}-test.md"
-        task_file.write_text("# Test")
-
-        # Create running marker
-        running_marker = task_file.parent / f".{task_file.stem}.running"
-        running_marker.write_text("process_id:12345:hostname\n")
-
-        status = runner.get_status([source_dir])
-
-        assert status['running'] == 1
-        assert status['pending'] == 0
 
     def test_get_status_multiple_sources(self, project_root):
         """Test status with multiple source directories."""

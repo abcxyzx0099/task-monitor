@@ -7,7 +7,6 @@ Architecture: No state file - directory structure is the source of truth.
 - tasks/task-documents/  - pending tasks
 - tasks/task-archive/    - completed tasks
 - tasks/task-failed/    - failed tasks
-- .task-XXX.running     - marker file for running tasks
 """
 
 __version__ = "2.0.0"

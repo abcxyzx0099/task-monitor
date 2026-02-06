@@ -5,7 +5,6 @@ No state file - directory structure is the source of truth:
 - tasks/task-documents/  - pending tasks
 - tasks/task-archive/    - completed tasks
 - tasks/task-failed/    - failed tasks
-- .task-XXX.running     - marker file for running tasks
 """
 
 import os
@@ -57,7 +56,7 @@ class TaskRunner:
         Pick the next task to execute from all source directories.
 
         Scans directories, sorts by filename (chronological order),
-        and returns the first available (not currently running) task.
+        and returns the first available task.
 
         Args:
             source_dirs: List of source directories to scan
@@ -81,24 +80,9 @@ class TaskRunner:
         # Sort by filename (chronological: task-YYYYMMDD-HHMMSS-*)
         all_tasks.sort(key=lambda p: p.name)
 
-        # Pick first task that's not currently running
-        for task_file in all_tasks:
-            task_id = task_file.stem
-
-            # Check if currently running (has .running marker)
-            running_marker = task_file.parent / f".{task_id}.running"
-            if running_marker.exists():
-                # Verify it's actually running (check process)
-                if self._is_task_actually_running(task_id):
-                    continue  # Skip, still running
-                else:
-                    # Stale marker - clean it up
-                    try:
-                        running_marker.unlink()
-                    except OSError:
-                        pass
-
-            return task_file
+        # Return first available task
+        if all_tasks:
+            return all_tasks[0]
 
         return None
 
@@ -131,107 +115,33 @@ class TaskRunner:
         # Sort by filename (chronological: task-YYYYMMDD-HHMMSS-*)
         all_tasks.sort(key=lambda p: p.name)
 
-        # Pick first task that's not currently running
-        for task_file in all_tasks:
-            task_id = task_file.stem
-
-            # Check if currently running (has .running marker)
-            running_marker = task_file.parent / f".{task_id}.running"
-            if running_marker.exists():
-                # Verify it's actually running (check process)
-                if self._is_task_actually_running(task_id):
-                    continue  # Skip, still running
-                else:
-                    # Stale marker - clean it up
-                    try:
-                        running_marker.unlink()
-                    except OSError:
-                        pass
-
-            return task_file
+        # Return first available task
+        if all_tasks:
+            return all_tasks[0]
 
         return None
 
-    def _is_task_actually_running(self, task_id: str) -> bool:
+    def execute_task(self, task_file: Path, worker: str = "unknown") -> Dict:
         """
-        Check if a task is actually running (not just has a marker).
+        Execute a task using the SyncTaskExecutor.
 
-        Uses the process ID stored in the marker file.
-
-        Args:
-            task_id: Task ID to check
-
-        Returns:
-            True if task is running, False otherwise
-        """
-        running_marker = self.project_workspace / "tasks" / "task-documents" / f".{task_id}.running"
-
-        if not running_marker.exists():
-            return False
-
-        try:
-            content = running_marker.read_text()
-            # Format: "process_id:hostname\n"
-            if ":" in content:
-                process_id_str = content.split(":")[0]
-                try:
-                    process_id = int(process_id_str)
-                    # Check if process is still alive
-                    import os
-                    try:
-                        os.kill(process_id, 0)  # Send signal 0 (no effect)
-                        return True  # Process exists
-                    except OSError:
-                        return False  # Process dead
-                except ValueError:
-                    pass
-        except (OSError, IOError):
-            pass
-
-        return False
-
-    def execute_task(self, task_file: Path) -> Dict:
-        """
-        Execute a task using the FIXED SyncTaskExecutor.
-
-        Creates .running marker, executes task, moves to archive/failed.
+        Executes task and moves to archive/failed.
 
         Args:
             task_file: Path to task document
+            worker: Worker name (e.g., "ad-hoc", "planned")
 
         Returns:
             Result dict with status and error info
         """
         task_id = task_file.stem
-        running_marker = task_file.parent / f".{task_id}.running"
-
-        # Check if already running
-        if running_marker.exists():
-            return {
-                "status": "skipped",
-                "reason": "Task already running",
-                "task_id": task_id
-            }
-
-        # Create running marker with process info
-        try:
-            running_marker.write_text(
-                f"process_id:{os.getpid()}:{socket.gethostname()}\n"
-                f"started_at:{datetime.now().isoformat()}\n"
-            )
-        except OSError as e:
-            return {
-                "status": "error",
-                "error": f"Failed to create running marker: {e}",
-                "task_id": task_id
-            }
 
         try:
-            # FIXED: Use the now-working SyncTaskExecutor directly
-            # (Removed the subprocess workaround for test4_worker.py)
+            # Execute the task
             result = self.executor.execute(
                 task_file,
-                project_workspace=self.project_workspace
+                project_workspace=self.project_workspace,
+                worker=worker
             )
 
             # Task completed - handle result
@@ -283,13 +193,6 @@ class TaskRunner:
                 "task_id": task_id
             }
 
-        finally:
-            # Always remove running marker
-            try:
-                running_marker.unlink()
-            except OSError:
-                pass
-
     def get_status(
         self,
         source_dirs: List[TaskSourceDirectory]
@@ -305,7 +208,6 @@ class TaskRunner:
         """
         stats = {
             "pending": 0,
-            "running": 0,
             "completed": 0,
             "failed": 0,
             "sources": {}
@@ -318,19 +220,14 @@ class TaskRunner:
 
             source_stats = {
                 "pending": 0,
-                "running": 0,
                 "completed": 0,
                 "failed": 0
             }
 
-            # Count pending tasks (task-*.md files, not .running markers)
+            # Count pending tasks
             for task_file in source_path.glob("task-*.md"):
                 if task_file.is_file():
-                    running_marker = task_file.parent / f".{task_file.stem}.running"
-                    if running_marker.exists():
-                        source_stats["running"] += 1
-                    else:
-                        source_stats["pending"] += 1
+                    source_stats["pending"] += 1
 
             # Count completed in archive
             if self.archive_dir.exists():
@@ -342,7 +239,6 @@ class TaskRunner:
 
             stats["sources"][source_dir.id] = source_stats
             stats["pending"] += source_stats["pending"]
-            stats["running"] += source_stats["running"]
             stats["completed"] += source_stats["completed"]
             stats["failed"] += source_stats["failed"]
 

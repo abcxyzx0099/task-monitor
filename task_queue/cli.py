@@ -1,16 +1,22 @@
 """
 Command-line interface for task-queue (Directory-Based State).
 
-Simplified CLI - no state file operations.
+Grouped command structure:
+- sources: list, add, rm
+- tasks: show, logs, cancel
+- workers: status, list
 """
 
 import sys
+import os
 import argparse
 import subprocess
+import threading
 from pathlib import Path
 
 from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
 from task_queue.task_runner import TaskRunner
+from task_queue.executor import get_lock_file_path, LockInfo, get_locked_task
 
 
 def _restart_daemon() -> bool:
@@ -37,23 +43,20 @@ def _restart_daemon() -> bool:
         return False
 
 
-def cmd_init(args):
-    """Initialize task system from current directory.
+# =============================================================================
+# INIT COMMAND
+# =============================================================================
 
-    Creates directory structure and registers both ad-hoc and planned queues.
-    Uses current directory as project workspace.
-    """
-    import os
+def cmd_init(args):
+    """Initialize task system from current directory."""
     from datetime import datetime
 
-    # Get current directory as project workspace
     project_workspace = Path.cwd()
     print("=" * 60)
     print("🚀 Task System Initialization")
     print("=" * 60)
     print(f"\n📁 Project Workspace: {project_workspace}")
 
-    # Define queue configurations
     queues = [
         {
             "id": "ad-hoc",
@@ -71,7 +74,6 @@ def cmd_init(args):
 
     config_manager = ConfigManager(args.config)
 
-    # Check if already initialized (only warn if not using force or skip-existing)
     existing_sources = [s.id for s in config_manager.config.task_source_directories]
     already_initialized = "ad-hoc" in existing_sources or "planned" in existing_sources
 
@@ -81,13 +83,9 @@ def cmd_init(args):
         print("\nUse --force to re-initialize or --skip-existing to add missing queues only.")
         return 0
 
-    # Create directory structure and register queues
     print("\n📂 Creating directory structure...")
-
     for queue in queues:
         queue_base = queue["path"].parent
-
-        # Create subdirectories
         for subdir in queue["subdirs"]:
             subdir_path = queue_base / subdir
             try:
@@ -99,28 +97,23 @@ def cmd_init(args):
 
     print("\n📋 Registering Task Source Directories...")
 
-    # Set project workspace
     if not config_manager.config.project_workspace:
         config_manager.set_project_workspace(str(project_workspace))
         print(f"   ✅ Set Project Workspace: {project_workspace}")
 
-    # Register queues
     for queue in queues:
         source_id = queue["id"]
         task_source_dir = str(queue["path"])
 
-        # Skip if already exists and --skip-existing is set
         if args.skip_existing and config_manager.config.get_task_source_directory(source_id):
             print(f"   ⏭️  Skipped existing: {source_id}")
             continue
 
         try:
-            # Remove existing if force mode
             if args.force and config_manager.config.get_task_source_directory(source_id):
                 config_manager.config.remove_task_source_directory(source_id)
                 print(f"   🔄 Removed existing: {source_id}")
 
-            # Add source directory
             config_manager.add_task_source_directory(
                 path=task_source_dir,
                 id=source_id,
@@ -132,7 +125,6 @@ def cmd_init(args):
             print(f"   ❌ Failed to register {source_id}: {e}")
             return 1
 
-    # Save configuration
     try:
         config_manager.save_config()
         print("\n💾 Configuration saved")
@@ -140,13 +132,8 @@ def cmd_init(args):
         print(f"\n❌ Failed to save configuration: {e}")
         return 1
 
-    # Verification
-    print("\n🔍 Verifying setup...")
-
-    # Reload config to verify
     config_manager = ConfigManager(args.config)
     registered = config_manager.config.task_source_directories
-    registered_ids = [s.id for s in registered]
 
     print(f"\n✅ Initialization complete!")
     print(f"\n📊 Summary:")
@@ -159,19 +146,15 @@ def cmd_init(args):
         if source.description:
             print(f"      Description: {source.description}")
 
-    # Show next steps
-    print(f"\n📚 Next Steps:")
-    print(f"   1. Create tasks using the task-documents skill")
-    print(f"   2. Start daemon: systemctl --user start task-queue.service")
-    print(f"   3. Check status: python -m task_queue.cli status")
-    print(f"   4. View logs: journalctl --user -u task-queue.service -f")
-
-    # Offer to restart daemon
     if args.restart_daemon:
         _restart_daemon()
 
     return 0
 
+
+# =============================================================================
+# STATUS COMMAND
+# =============================================================================
 
 def cmd_status(args):
     """Show system status."""
@@ -186,95 +169,120 @@ def cmd_status(args):
     print("📊 Task Queue Status")
     print("=" * 60)
 
-    # Configuration info
     print(f"\nConfiguration: {args.config}")
     print(f"Project Workspace: {config.project_workspace or 'Not set'}")
 
-    # Create task runner to get status
     if not config.project_workspace:
         print("\n⚠️  No Project Workspace set")
-        print("Use 'task-queue register' to set up the workspace")
+        print("Use 'task-queue init' or 'task-queue sources add' to set up the workspace")
         return 0
 
-    task_runner = TaskRunner(
-        project_workspace=config.project_workspace
-    )
-
+    task_runner = TaskRunner(project_workspace=config.project_workspace)
     source_dirs = config.task_source_directories
 
     if not source_dirs:
         print("\n⚠️  No Task Source Directories configured")
-        print("Use 'task-queue register' to add a source directory")
-        print("Use 'task-queue unregister --source-id <id>' to remove a source directory")
+        print("Use 'task-queue sources add' to add a source directory")
         return 0
-
-    print(f"\nTask Source Directories: {len(source_dirs)}")
 
     # Get status by scanning directories
     status = task_runner.get_status(source_dirs)
+
+    if args.detailed:
+        _print_detailed_status(config, task_runner, source_dirs)
+    else:
+        _print_overview_status(config, status)
+
+    return 0
+
+
+def _print_overview_status(config, status):
+    """Print overview status (summary counts)."""
+    print(f"\nTask Source Directories: {len(status['sources'])}")
 
     print(f"\n📋 Overall Statistics:")
     print(f"   Pending:   {status['pending']}")
     print(f"   Completed: {status['completed']}")
     print(f"   Failed:    {status['failed']}")
 
-    # Per-source breakdown
-    print(f"\n📁 Per-Source Details:")
+    print(f"\n📁 Per-Source Summary:")
     for source_id, source_stats in status['sources'].items():
         source_dir = config.get_task_source_directory(source_id)
-        print(f"\n  📁 {source_id}")
+        running = get_locked_task(Path(source_dir.path))
+        status_indicator = "🔄 Running" if running else "✅ Idle"
+        print(f"\n  📁 {source_id} ({status_indicator})")
         if source_dir:
             print(f"      Path: {source_dir.path}")
-            print(f"      Description: {source_dir.description}")
+        if running:
+            print(f"      Running: {running}")
         print(f"      Pending: {source_stats['pending']}, "
               f"Completed: {source_stats['completed']}, Failed: {source_stats['failed']}")
 
-    return 0
 
+def _print_detailed_status(config, task_runner, source_dirs):
+    """Print detailed status with task lists."""
+    print(f"\nTask Source Directories: {len(source_dirs)}")
 
-def cmd_register(args):
-    """Register a Task Source Directory for watchdog monitoring."""
-    try:
-        config_manager = ConfigManager(args.config)
+    for source_dir in source_dirs:
+        source_path = Path(source_dir.path)
+        print(f"\n{'=' * 60}")
+        print(f"📁 Source: {source_dir.id}")
+        print(f"{'=' * 60}")
+        print(f"Path: {source_dir.path}")
+        if source_dir.description:
+            print(f"Description: {source_dir.description}")
 
-        # Set project workspace if not set
-        if not config_manager.config.project_workspace:
-            config_manager.set_project_workspace(args.project_workspace)
-
-        # Add source directory
-        source_dir = config_manager.add_task_source_directory(
-            path=args.task_source_dir,
-            id=args.source_id
-        )
-
-        # Save config
-        config_manager.save_config()
-
-        print(f"\n✅ Registered Task Source Directory '{args.source_id}'")
-        print(f"   Path: {args.task_source_dir}")
-        print(f"   Workspace: {args.project_workspace}")
-
-        # Count existing tasks
-        from pathlib import Path
-        source_path = Path(args.task_source_dir)
-        task_files = list(source_path.glob("task-*.md"))
-
-        if task_files:
-            print(f"\n📋 Found {len(task_files)} task documents in directory")
+        # Check for running task
+        running_task = get_locked_task(source_path)
+        if running_task:
+            lock_file = source_path / f".{running_task}.lock"
+            lock_info = LockInfo.from_file(lock_file)
+            print(f"\n🔄 Running Task:")
+            print(f"   Task ID: {running_task}")
+            if lock_info:
+                print(f"   Worker: {lock_info.worker}")
+                print(f"   Started: {lock_info.started_at}")
         else:
-            print(f"\n📭 No task documents found yet")
+            print(f"\n✅ Idle (no running tasks)")
 
-        # Restart daemon to apply changes
-        _restart_daemon()
+        # List pending tasks
+        pending_tasks = sorted(source_path.glob("task-*.md"))
+        if pending_tasks:
+            print(f"\n📋 Pending Tasks ({len(pending_tasks)}):")
+            for task in pending_tasks[:10]:  # Show first 10
+                print(f"   - {task.name}")
+            if len(pending_tasks) > 10:
+                print(f"   ... and {len(pending_tasks) - 10} more")
+        else:
+            print(f"\n📭 No pending tasks")
 
-    except Exception as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
-        return 1
+        # Count completed and failed
+        workspace = Path(config.project_workspace)
+        if "ad-hoc" in source_dir.id.lower():
+            base = workspace / "tasks" / "ad-hoc"
+        else:
+            base = workspace / "tasks" / "planned"
 
-    return 0
+        completed = list((base / "task-archive").glob("task-*.md")) if (base / "task-archive").exists() else []
+        failed = list((base / "task-failed").glob("task-*.md")) if (base / "task-failed").exists() else []
+
+        print(f"\n📊 Statistics:")
+        print(f"   Completed: {len(completed)}")
+        print(f"   Failed: {len(failed)}")
+
+        if completed:
+            print(f"\n✅ Recently Completed:")
+            for task in sorted(completed, key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
+                mtime = p.stat().st_mtime
+                from datetime import datetime
+                print(f"   - {task.name} ({datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')})")
 
 
-def cmd_list_sources(args):
+# =============================================================================
+# SOURCES COMMANDS
+# =============================================================================
+
+def cmd_sources_list(args):
     """List Task Source Directories."""
     try:
         config_manager = ConfigManager(args.config)
@@ -290,32 +298,70 @@ def cmd_list_sources(args):
         return 0
 
     for source_dir in config.task_source_directories:
-        print(f"\n  📁 {source_dir.id}")
+        running = get_locked_task(Path(source_dir.path))
+        status_indicator = "🔄" if running else "✅"
+        print(f"\n  {status_indicator} {source_dir.id}")
         print(f"      Path: {source_dir.path}")
         print(f"      Description: {source_dir.description or '(no description)'}")
+        if running:
+            print(f"      Running: {running}")
         print(f"      Added: {source_dir.added_at}")
 
     return 0
 
 
-def cmd_unregister(args):
-    """Remove (unregister) a Task Source Directory."""
+def cmd_sources_add(args):
+    """Add a Task Source Directory."""
+    try:
+        config_manager = ConfigManager(args.config)
+
+        if not config_manager.config.project_workspace:
+            config_manager.set_project_workspace(args.project_workspace)
+
+        source_dir = config_manager.add_task_source_directory(
+            path=args.task_source_dir,
+            id=args.id,  # Fixed: was args.source_id, but argument is --id
+            description=args.description or ""
+        )
+
+        config_manager.save_config()
+
+        print(f"\n✅ Added Task Source Directory '{args.id}'")  # Fixed: was args.source_id
+        print(f"   Path: {args.task_source_dir}")
+        print(f"   Workspace: {args.project_workspace}")
+
+        # Count existing tasks
+        source_path = Path(args.task_source_dir)
+        if source_path.exists():
+            task_files = list(source_path.glob("task-*.md"))
+            if task_files:
+                print(f"\n📋 Found {len(task_files)} task documents in directory")
+            else:
+                print(f"\n📭 No task documents found yet")
+
+        _restart_daemon()
+
+    except Exception as e:
+        print(f"❌ Error: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def cmd_sources_rm(args):
+    """Remove a Task Source Directory."""
     try:
         config_manager = ConfigManager(args.config)
         config = config_manager.config
 
-        # Check if source exists
         source_dir = config.get_task_source_directory(args.source_id)
         if not source_dir:
             print(f"❌ Task Source Directory '{args.source_id}' not found")
             return 1
 
-        # Remove it
         if config.remove_task_source_directory(args.source_id):
             config_manager.save_config()
-            print(f"✅ Unregistered Task Source Directory '{args.source_id}'")
-
-            # Restart daemon to apply changes
+            print(f"✅ Removed Task Source Directory '{args.source_id}'")
             _restart_daemon()
             return 0
         else:
@@ -326,6 +372,321 @@ def cmd_unregister(args):
         print(f"❌ Error: {e}", file=sys.stderr)
         return 1
 
+
+# =============================================================================
+# TASKS COMMANDS
+# =============================================================================
+
+def _find_task_file(task_id: str, config) -> Path:
+    """Find a task file by ID in any source directory."""
+    for source_dir in config.task_source_directories:
+        source_path = Path(source_dir.path)
+        # Check in task-documents
+        task_file = source_path / f"{task_id}.md"
+        if task_file.exists():
+            return task_file
+        # Check in archive
+        workspace = Path(config.project_workspace)
+        if "ad-hoc" in source_dir.id.lower():
+            base = workspace / "tasks" / "ad-hoc"
+        else:
+            base = workspace / "tasks" / "planned"
+        for subdir in ["task-archive", "task-failed"]:
+            task_file = base / subdir / f"{task_id}.md"
+            if task_file.exists():
+                return task_file
+    return None
+
+
+def cmd_tasks_show(args):
+    """Show task document path (simple output with reminder)."""
+    try:
+        config_manager = ConfigManager(args.config)
+        config = config_manager.config
+    except Exception as e:
+        print(f"❌ Error loading configuration: {e}", file=sys.stderr)
+        return 1
+
+    task_file = _find_task_file(args.task_id, config)
+
+    if not task_file:
+        print(f"❌ Task '{args.task_id}' not found")
+        return 1
+
+    print(f"\n📄 Task document: {task_file}")
+    print(f"\n💡 Use 'cat {task_file}' or 'less {task_file}' to view full details")
+
+    return 0
+
+
+def cmd_tasks_logs(args):
+    """Show task result log path (simple output with reminder)."""
+    try:
+        config_manager = ConfigManager(args.config)
+        config = config_manager.config
+    except Exception as e:
+        print(f"❌ Error loading configuration: {e}", file=sys.stderr)
+        return 1
+
+    workspace = Path(config.project_workspace)
+
+    # Try to find result JSON file
+    result_dirs = [
+        workspace / "tasks" / "ad-hoc" / "task-queue",
+        workspace / "tasks" / "planned" / "task-queue",
+        workspace / "tasks" / "task-queue",
+    ]
+
+    result_file = None
+    for result_dir in result_dirs:
+        potential = result_dir / f"{args.task_id}.json"
+        if potential.exists():
+            result_file = potential
+            break
+
+    if not result_file:
+        print(f"❌ No result logs found for task '{args.task_id}'")
+        print(f"   Task may not have been executed yet")
+        return 1
+
+    # Read basic info from result
+    try:
+        import json
+        with open(result_file, 'r') as f:
+            result_data = json.load(f)
+
+        print(f"\n📋 Task: {args.task_id}")
+        print(f"Status: {'✅ Success' if result_data.get('success') else '❌ Failed'}")
+        if result_data.get('started_at'):
+            print(f"Started: {result_data['started_at']}")
+        if result_data.get('completed_at'):
+            print(f"Completed: {result_data['completed_at']}")
+        if result_data.get('duration_ms'):
+            print(f"Duration: {result_data['duration_ms'] / 1000:.1f} seconds")
+    except Exception:
+        pass  # Just show path if we can't read the file
+
+    print(f"\n💾 Full result logs: {result_file}")
+    print(f"\n💡 Use 'cat {result_file}' or 'jq . {result_file}' to view full details")
+
+    return 0
+
+
+def cmd_tasks_cancel(args):
+    """Cancel a running task."""
+    try:
+        config_manager = ConfigManager(args.config)
+        config = config_manager.config
+    except Exception as e:
+        print(f"❌ Error loading configuration: {e}", file=sys.stderr)
+        return 1
+
+    # Find the task
+    task_file = _find_task_file(args.task_id, config)
+
+    if not task_file:
+        print(f"❌ Task '{args.task_id}' not found")
+        return 1
+
+    # Check if task has a lock file
+    lock_file = get_lock_file_path(task_file)
+
+    if not lock_file.exists():
+        print(f"❌ Task '{args.task_id}' is not running")
+        print(f"   Only running tasks can be cancelled")
+        return 1
+
+    # Read lock info
+    lock_info = LockInfo.from_file(lock_file)
+    if not lock_info:
+        print(f"❌ Invalid lock file")
+        return 1
+
+    # Check if process is still running
+    if os.path.exists(f"/proc/{lock_info.pid}"):
+        print(f"\n🛑 Cancelling task: {args.task_id}")
+        print(f"   Worker: {lock_info.worker}")
+        print(f"   PID: {lock_info.pid}")
+
+        # We can't actually cancel the SDK task, but we can mark it as cancelled
+        # by moving it to failed and removing the lock
+        try:
+            lock_file.unlink()
+            print(f"✅ Lock file removed")
+
+            # Move task to failed directory
+            workspace = Path(config.project_workspace)
+            if "ad-hoc" in lock_info.worker:
+                failed_dir = workspace / "tasks" / "ad-hoc" / "task-failed"
+            else:
+                failed_dir = workspace / "tasks" / "planned" / "task-failed"
+
+            failed_dir.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.move(str(task_file), str(failed_dir / task_file.name))
+
+            print(f"✅ Task moved to failed directory")
+            print(f"   Reason: User cancelled")
+            return 0
+        except Exception as e:
+            print(f"❌ Failed to cancel task: {e}")
+            return 1
+    else:
+        # Stale lock - clean it up
+        print(f"⚠️  Task has stale lock (process no longer running)")
+        print(f"   Cleaning up stale lock...")
+        try:
+            lock_file.unlink()
+            print(f"✅ Stale lock removed")
+        except Exception as e:
+            print(f"❌ Failed to remove stale lock: {e}")
+        return 1
+
+
+# =============================================================================
+# WORKERS COMMANDS
+# =============================================================================
+
+def cmd_workers_status(args):
+    """Show worker activity status."""
+    try:
+        config_manager = ConfigManager(args.config)
+        config = config_manager.config
+    except Exception as e:
+        print(f"❌ Error loading configuration: {e}", file=sys.stderr)
+        return 1
+
+    if not config.project_workspace:
+        print("❌ No Project Workspace set")
+        return 1
+
+    print("=" * 60)
+    print("👷 Worker Status")
+    print("=" * 60)
+
+    print(f"\nProject Workspace: {config.project_workspace}")
+
+    source_dirs = config.task_source_directories
+    if not source_dirs:
+        print("\n⚠️  No Task Source Directories configured")
+        return 0
+
+    print(f"\nActive Workers: {len(source_dirs)}")
+
+    for source_dir in source_dirs:
+        source_path = Path(source_dir.path)
+        running_task = get_locked_task(source_path)
+
+        print(f"\n┌─────────────────────────────────────────────────────────────┐")
+        print(f"│ Worker: {source_dir.id}")
+        print(f"├─────────────────────────────────────────────────────────────┤")
+
+        if running_task:
+            lock_file = source_path / f".{running_task}.lock"
+            lock_info = LockInfo.from_file(lock_file)
+
+            print(f"│ State: 🔄 RUNNING (Executing task)")
+            if lock_info:
+                print(f"│ Thread ID: {lock_info.thread_id}")
+                from datetime import datetime
+                started = datetime.fromisoformat(lock_info.started_at)
+                elapsed = (datetime.now() - started).total_seconds()
+                print(f"│ Current Task: {running_task}")
+                print(f"│ Started: {lock_info.started_at}")
+                print(f"│ Elapsed: {int(elapsed // 60)}m {int(elapsed % 60)}s")
+        else:
+            print(f"│ State: ✅ IDLE (Waiting for tasks)")
+
+        # Count tasks in this source
+        pending = len(list(source_path.glob("task-*.md")))
+
+        workspace = Path(config.project_workspace)
+        if "ad-hoc" in source_dir.id.lower():
+            base = workspace / "tasks" / "ad-hoc"
+        else:
+            base = workspace / "tasks" / "planned"
+
+        archive = base / "task-archive"
+        failed = base / "task-failed"
+
+        completed = len(list(archive.glob("task-*.md"))) if archive.exists() else 0
+        failed_count = len(list(failed.glob("task-*.md"))) if failed.exists() else 0
+
+        print(f"│")
+        print(f"│ Tasks Processed: {completed + failed_count}")
+        print(f"│ Pending: {pending} | Completed: {completed} | Failed: {failed_count}")
+
+        print(f"└─────────────────────────────────────────────────────────────┘")
+
+    # Summary
+    running_count = sum(1 for sd in source_dirs if get_locked_task(Path(sd.path)))
+    idle_count = len(source_dirs) - running_count
+
+    print(f"\nSummary:")
+    print(f"   Total Workers: {len(source_dirs)}")
+    print(f"   Running: {running_count}")
+    print(f"   Idle: {idle_count}")
+
+    return 0
+
+
+def cmd_workers_list(args):
+    """List all workers."""
+    try:
+        config_manager = ConfigManager(args.config)
+        config = config_manager.config
+    except Exception as e:
+        print(f"❌ Error loading configuration: {e}", file=sys.stderr)
+        return 1
+
+    print("\n👷 Workers:")
+
+    source_dirs = config.task_source_directories
+    if not source_dirs:
+        print("  (none)")
+        return 0
+
+    for source_dir in source_dirs:
+        running_task = get_locked_task(Path(source_dir.path))
+        status = "🔄 Running" if running_task else "✅ Idle"
+        print(f"\n  {status} {source_dir.id}")
+        print(f"      Path: {source_dir.path}")
+        if running_task:
+            print(f"      Current Task: {running_task}")
+
+    return 0
+
+
+# =============================================================================
+# LOGS COMMAND
+# =============================================================================
+
+def cmd_logs(args):
+    """Show daemon logs."""
+    import subprocess
+
+    follow = "--follow" if args.follow else ""
+
+    if args.lines:
+        result = subprocess.run(
+            ["journalctl", "--user", "-u", "task-queue.service", "-n", str(args.lines), "--no-pager"],
+            capture_output=False
+        )
+    else:
+        if follow:
+            print("Showing live logs (Ctrl+C to exit)...")
+        subprocess.run(
+            f"journalctl --user -u task-queue.service {follow} --no-pager",
+            shell=True,
+            capture_output=False
+        )
+
+    return 0
+
+
+# =============================================================================
+# RUN COMMAND (testing)
+# =============================================================================
 
 def cmd_run(args):
     """Run task queue interactively (for testing)."""
@@ -339,10 +700,7 @@ def cmd_run(args):
             print("❌ No Project Workspace set")
             return 1
 
-        task_runner = TaskRunner(
-            project_workspace=config.project_workspace
-        )
-
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
         source_dirs = config.task_source_directories
 
         print("=" * 60)
@@ -357,19 +715,22 @@ def cmd_run(args):
         for cycle in range(cycles):
             print(f"\n--- Cycle {cycle + 1} ---")
 
-            # Pick next task
             task_file = task_runner.pick_next_task(source_dirs)
 
             if task_file:
                 print(f"Found task: {task_file.name}")
-                result = task_runner.execute_task(task_file)
+
+                # Determine worker from task path
+                rel_path = task_file.relative_to(config.project_workspace)
+                worker = "ad-hoc" if "ad-hoc" in str(rel_path) else "planned"
+
+                result = task_runner.execute_task(task_file, worker=worker)
                 print(f"Status: {result['status']}")
                 if result.get("error"):
                     print(f"Error: {result['error']}")
             else:
                 print("No pending tasks")
 
-            # Check if any tasks exist
             status = task_runner.get_status(source_dirs)
             if status['pending'] == 0:
                 print("\n✅ All tasks processed")
@@ -386,6 +747,10 @@ def cmd_run(args):
     return 0
 
 
+# =============================================================================
+# MAIN
+# =============================================================================
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -393,134 +758,112 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Initialize task system from current directory
+  # Initialize task system
   task-queue init
 
-  # Check status
+  # Show status
   task-queue status
+  task-queue status --detailed
 
-  # Register a Task Source Directory (advanced)
-  task-queue register \\
-    --task-source-dir tasks/task-documents \\
-    --project-workspace /path/to/project \\
-    --source-id main
+  # Manage sources
+  task-queue sources list
+  task-queue sources add /path/to/tasks --id my-queue
+  task-queue sources rm my-queue
+
+  # Task operations
+  task-queue tasks show task-20260207-123456
+  task-queue tasks logs task-20260207-123456
+  task-queue tasks cancel task-20260207-123456
+
+  # Worker operations
+  task-queue workers status
+  task-queue workers list
+
+  # View logs
+  task-queue logs
+  task-queue logs --follow
 
   # Run interactively
   task-queue run --cycles 5
-
-  # List source directories
-  task-queue list-sources
-
-  # Unregister a source directory
-  task-queue unregister --source-id main
         """
     )
 
-    # Global arguments
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=None,
-        help="Path to configuration file"
-    )
+    parser.add_argument("--config", type=Path, default=None, help="Path to configuration file")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Init command
-    init_parser = subparsers.add_parser(
-        "init",
-        help="Initialize task system from current directory",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Initialize from current directory
-  task-queue init
-
-  # Re-initialize (replace existing configuration)
-  task-queue init --force
-
-  # Initialize but skip existing queues
-  task-queue init --skip-existing
-
-  # Initialize and restart daemon
-  task-queue init --restart-daemon
-
-This command creates the directory structure for ad-hoc and planned task queues,
-then registers them as Task Source Directories. The current directory is used as
-the Project Workspace.
-        """
-    )
-    init_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-initialize even if already set up (replaces existing queues)"
-    )
-    init_parser.add_argument(
-        "--skip-existing",
-        action="store_true",
-        help="Skip queues that are already registered"
-    )
-    init_parser.add_argument(
-        "--restart-daemon",
-        action="store_true",
-        help="Restart the task-queue daemon after initialization"
-    )
+    init_parser = subparsers.add_parser("init", help="Initialize task system")
+    init_parser.add_argument("--force", action="store_true", help="Re-initialize completely")
+    init_parser.add_argument("--skip-existing", action="store_true", help="Skip existing queues")
+    init_parser.add_argument("--restart-daemon", action="store_true", help="Restart daemon after init")
     init_parser.set_defaults(func=cmd_init)
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
+    status_parser.add_argument("--detailed", action="store_true", help="Show detailed task lists")
     status_parser.set_defaults(func=cmd_status)
 
-    # Register command
-    register_parser = subparsers.add_parser("register", help="Register Task Source Directory")
-    register_parser.add_argument(
-        "--task-source-dir",
-        required=True,
-        help="Path to Task Source Directory"
-    )
-    register_parser.add_argument(
-        "--project-workspace",
-        required=True,
-        help="Path to Project Workspace"
-    )
-    register_parser.add_argument(
-        "--source-id",
-        required=True,
-        help="Unique ID for this source"
-    )
-    register_parser.set_defaults(func=cmd_register)
+    # Sources subcommands
+    sources_parser = subparsers.add_parser("sources", help="Manage task source directories")
+    sources_subparsers = sources_parser.add_subparsers(dest="sources_command", help="Sources commands")
 
-    # List sources command
-    list_sources_parser = subparsers.add_parser("list-sources", help="List Task Source Directories")
-    list_sources_parser.set_defaults(func=cmd_list_sources)
+    sources_list_parser = sources_subparsers.add_parser("list", help="List source directories")
+    sources_list_parser.set_defaults(func=cmd_sources_list)
 
-    # Unregister command
-    unregister_parser = subparsers.add_parser("unregister", help="Remove Task Source Directory")
-    unregister_parser.add_argument(
-        "--source-id",
-        required=True,
-        help="Task Source Directory ID to remove"
-    )
-    unregister_parser.set_defaults(func=cmd_unregister)
+    sources_add_parser = sources_subparsers.add_parser("add", help="Add a source directory")
+    sources_add_parser.add_argument("task_source_dir", help="Path to task source directory")
+    sources_add_parser.add_argument("--id", required=True, help="Unique ID for this source")
+    sources_add_parser.add_argument("--project-workspace", help="Path to project workspace")
+    sources_add_parser.add_argument("--description", help="Description of this source")
+    sources_add_parser.set_defaults(func=cmd_sources_add)
+
+    sources_rm_parser = sources_subparsers.add_parser("rm", help="Remove a source directory")
+    sources_rm_parser.add_argument("--source-id", required=True, help="Source ID to remove")
+    sources_rm_parser.set_defaults(func=cmd_sources_rm)
+
+    # Tasks subcommands
+    tasks_parser = subparsers.add_parser("tasks", help="Manage tasks")
+    tasks_subparsers = tasks_parser.add_subparsers(dest="tasks_command", help="Tasks commands")
+
+    tasks_show_parser = tasks_subparsers.add_parser("show", help="Show task document path")
+    tasks_show_parser.add_argument("task_id", help="Task ID")
+    tasks_show_parser.set_defaults(func=cmd_tasks_show)
+
+    tasks_logs_parser = tasks_subparsers.add_parser("logs", help="Show task result logs")
+    tasks_logs_parser.add_argument("task_id", help="Task ID")
+    tasks_logs_parser.set_defaults(func=cmd_tasks_logs)
+
+    tasks_cancel_parser = tasks_subparsers.add_parser("cancel", help="Cancel a running task")
+    tasks_cancel_parser.add_argument("task_id", help="Task ID to cancel")
+    tasks_cancel_parser.set_defaults(func=cmd_tasks_cancel)
+
+    # Workers subcommands
+    workers_parser = subparsers.add_parser("workers", help="Manage workers")
+    workers_subparsers = workers_parser.add_subparsers(dest="workers_command", help="Workers commands")
+
+    workers_status_parser = workers_subparsers.add_parser("status", help="Show worker status")
+    workers_status_parser.set_defaults(func=cmd_workers_status)
+
+    workers_list_parser = workers_subparsers.add_parser("list", help="List workers")
+    workers_list_parser.set_defaults(func=cmd_workers_list)
+
+    # Logs command
+    logs_parser = subparsers.add_parser("logs", help="Show daemon logs")
+    logs_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
+    logs_parser.add_argument("--lines", "-n", type=int, help="Number of lines to show")
+    logs_parser.set_defaults(func=cmd_logs)
 
     # Run command
-    run_parser = subparsers.add_parser("run", help="Run task queue interactively")
-    run_parser.add_argument(
-        "--cycles",
-        type=int,
-        default=0,
-        help="Number of cycles (0 = infinite)"
-    )
+    run_parser = subparsers.add_parser("run", help="Run interactively (testing)")
+    run_parser.add_argument("--cycles", type=int, default=0, help="Number of cycles")
     run_parser.set_defaults(func=cmd_run)
 
-    # Parse arguments
     args = parser.parse_args()
 
-    # Set default config file if not specified
     if not args.config:
         args.config = DEFAULT_CONFIG_FILE
 
-    # Execute command
     if hasattr(args, 'func'):
         return args.func(args)
     else:

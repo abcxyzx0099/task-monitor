@@ -289,7 +289,7 @@ class TaskQueueDaemon:
                 if task_file:
                     # Execute the task
                     logger.info(f"[{source_dir.id}] Executing: {task_file.name}")
-                    result = self.task_runner.execute_task(task_file)
+                    result = self.task_runner.execute_task(task_file, worker=source_dir.id)
                     logger.info(f"[{source_dir.id}] Task completed: {result['status']}")
                     if result.get("error"):
                         logger.warning(f"[{source_dir.id}] Error: {result['error']}")

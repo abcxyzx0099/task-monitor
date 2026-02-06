@@ -1,31 +1,32 @@
 # Task Queue
 
-A task monitoring and execution system that processes task specifications using the Claude Agent SDK. Features event-driven file monitoring with parallel worker architecture.
+A task monitoring and execution system that processes task specifications using the Claude Agent SDK. Features event-driven file monitoring with parallel worker architecture and lock file-based running task tracking.
 
 ## Architecture Overview
 
 ```
-[Task Queue System - v2.0 Directory-Based State with Parallel Workers]
+[Task Queue System - v2.1 Directory-Based State with Parallel Workers & Lock Files]
 
-Task Source Directory A          Task Source Directory B          Task Source Directory C
-tasks/a/                          tasks/b/                          tasks/c/
-[task-a1.md]                      [task-b1.md]                      [task-c1.md]
-[task-a2.md]                      [task-b2.md]                      [task-c2.md]
-     |                                  |                                  |
-     ▼                                  ▼                                  ▼
-┌─────────────────┐            ┌─────────────────┐            ┌─────────────────┐
-│  Worker Thread  │            │  Worker Thread  │            │  Worker Thread  │
-│  for Source A   │            │  for Source B   │            │  for Source C   │
-│                 │            │                 │            │                 │
-│  Sequential     │            │  Sequential     │            │  Sequential     │
-│  FIFO Queue     │            │  FIFO Queue     │            │  FIFO Queue     │
-│                 │            │                 │            │                 │
-│ task-a1 → a2    │            │ task-b1 → b2    │            │ task-c1 → c2    │
-└─────────────────┘            └─────────────────┘            └─────────────────┘
-     |                                  |                                  |
-     └────────────────┬─────────────────┴────────────────┬─────────────────┘
-                      │                                  │
-                      ▼                                  ▼
+Task Source Directory A          Task Source Directory B
+tasks/a/                          tasks/b/
+[task-a1.md]                      [task-b1.md]
+[.task-a1.lock] ← Running        [task-b2.md]
+[task-a2.md]
+     │                                  │
+     ▼                                  ▼
+┌─────────────────┐            ┌─────────────────┐
+│  Worker Thread  │            │  Worker Thread  │
+│  for Source A   │            │  for Source B   │
+│                 │            │                 │
+│  Sequential     │            │  Sequential     │
+│  FIFO Queue     │            │  FIFO Queue     │
+│                 │            │                 │
+│ task-a1 → a2    │            │ task-b1 → b2    │
+└─────────────────┘            └─────────────────┘
+     │                                  │
+     └────────────────┬─────────────────┘
+                      │
+                      ▼
               ┌──────────────────────────────────────────────┐
               │         Project Workspace (single)          │
               │    /home/admin/workspaces/datachat          │
@@ -43,7 +44,7 @@ Execution Model:
 | **1** | **Task Source Directory** | A folder containing task document files. Watched for file changes. |
 | **2** | **Task Document** | Individual task specification file (e.g., `task-YYYYMMDD-HHMMSS-description.md`). |
 | **3** | **Project Workspace** | The working directory where Claude Agent SDK executes. |
-| **4** | **Directory-Based State** | File system is the source of truth. Running tasks marked by `.task-XXX.running` files. |
+| **4** | **Directory-Based State** | File system is the source of truth. Lock files track running tasks. |
 
 ## Features
 
@@ -56,10 +57,9 @@ Execution Model:
 | **Sequential Within Source** | Tasks from same source execute one at a time (FIFO) |
 | **Parallel Across Sources** | Different sources execute simultaneously |
 | **Directory-Based State** | No state file - filesystem structure is the source of truth |
+| **Lock File Tracking** | `.task-XXX.lock` files track running tasks with metadata |
 | **JSON Result Files** | Captures execution metadata, cost, token usage per task |
 | **Auto-Load on Create** | Watchdog auto-detects new Task Documents |
-| **Manual Run** | Explicit control via `run` command |
-| **Unload by Source** | Remove all tasks from a specific source |
 | **Claude Agent SDK Integration** | Executes tasks via `/task-worker` skill |
 | **Daemon Service** | Runs as systemd user service for continuous processing |
 
@@ -69,21 +69,70 @@ Execution Model:
 
 **Different sources:** Parallel (A-1 and B-1 run simultaneously)
 
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              ONE DAEMON PROCESS (PID-locked)            │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │ Thread 1     │  │ Thread 2     │  │ Thread 3     │ │
+│  │ ↓            │  │ ↓            │  │ ↓            │ │
+│  │ Directory A  │  │ Directory B  │  │ Directory C  │ │
+│  │ (Sequential) │  │ (Sequential) │  │ (Sequential) │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                          │
+│           1 Thread per Directory (1:1 mapping)          │
+└─────────────────────────────────────────────────────────┘
+```
+
+| Component | Count | Behavior |
+|-----------|-------|----------|
+| Process | 1 | Single daemon (PID lock prevents multiples) |
+| Threads | N | One worker thread per Task Source Directory |
+| Per Directory | Sequential | Tasks execute one at a time (FIFO) |
+| Across Directories | Parallel | Multiple directories run simultaneously |
+
+### Lock File Format
+
+When a task is running, a lock file is created in the task source directory:
+
+**Location:** `{source-directory}/.task-{task-id}.lock`
+
+**Format:**
+```json
+{
+  "task_id": "task-20260207-123456-fix-bug",
+  "worker": "ad-hoc",
+  "thread_id": "140234567890123",
+  "pid": 12345,
+  "started_at": "2026-02-07T12:35:00.123456"
+}
+```
+
+**Purpose:**
+- Track which task is currently running
+- Identify which worker is executing
+- Enable stale lock detection (via PID check)
+- Track execution start time
+
 ### Task Directories
 
 | Directory | Purpose |
 |-----------|---------|
 | `{source}/` | Pending task documents (task-*.md) |
-| `{source}/.task-XXX.running` | Marker file for task currently executing |
+| `{source}/.task-XXX.lock` | Lock file for running task |
 | `{source}/../task-archive/` | Completed task documents |
 | `{source}/../task-failed/` | Failed task documents |
+| `{source}/../task-queue/` | JSON result files |
 
 ### Safety Features
 
 - **Atomic Writes**: Config files use temporary file + atomic replacement
 - **File Locking**: fcntl-based locks prevent concurrent modification
-- **Running Markers**: `.task-XXX.running` files indicate task in progress
-- **Stale Detection**: Orphaned markers are cleaned up automatically
+- **Lock File Tracking**: Running tasks tracked with metadata (worker, thread, PID)
+- **Stale Lock Detection**: Lock files with dead PIDs are automatically cleaned up
 - **Archive Preservation**: Completed/failed task specs preserved in directories
 - **Result Tracking**: JSON files capture execution metadata for every task
 - **Graceful Shutdown**: All workers stop cleanly on SIGTERM/SIGINT
@@ -112,15 +161,28 @@ systemctl --user enable task-queue
 
 ## Quick Start
 
-### 1. Initialize and Configure
+### 1. Initialize the System
 
 ```bash
-# Initialize configuration
-task-queue init
+# From your project directory
+cd /home/admin/workspaces/datachat
 
-# Load a Task Source Directory
-task-queue load --task-source-dir tasks/task-documents --project-workspace /home/admin/workspaces/datachat --source-id main
-# Output: ✅ Registered Task Source Directory 'main'
+# Initialize (creates directories, registers ad-hoc and planned queues)
+python -m task_queue.cli init
+```
+
+This creates:
+```
+tasks/
+├── ad-hoc/
+│   ├── task-staging/
+│   ├── task-documents/      # Task Source Directory
+│   ├── task-archive/
+│   ├── task-failed/
+│   ├── task-queue/
+│   └── task-reports/
+└── planned/
+    └── (same structure)
 ```
 
 ### 2. Create a Task Document
@@ -130,59 +192,101 @@ Create a file in your Task Source Directory following the naming pattern:
 task-YYYYMMDD-HHMMSS-description.md
 ```
 
-Example: `task-20260205-100000-fix-auth-timeout.md`
+Example: `task-20260207-120000-fix-auth-timeout.md`
 
 The watchdog will auto-detect the new task immediately.
 
 ### 3. Check status
 
 ```bash
-task-queue status
+# Overview mode
+python -m task_queue.cli status
+
+# Detailed mode (shows running tasks)
+python -m task_queue.cli status --detailed
 ```
 
-### 4. Run tasks
+### 4. Start daemon
 
 ```bash
-# Manual execution (one cycle)
-task-queue run
+# Start the daemon for automatic processing
+systemctl --user start task-queue.service
 
-# Run N cycles
-task-queue run --cycles 5
-
-# Run indefinitely (daemon mode)
-systemctl --user start task-queue
+# View live logs
+journalctl --user -u task-queue.service -f
 ```
 
 ## CLI Commands
 
-### Configuration
+### System Commands
 
 ```bash
-# Initialize configuration
-task-queue init
+# Initialize task system from current directory
+python -m task_queue.cli init
 
-# Load a Task Source Directory (sets workspace if not set)
-task-queue load --task-source-dir <path> --project-workspace <path> --source-id <id>
+# Show system status (overview)
+python -m task_queue.cli status
+
+# Show detailed status (with running tasks and lists)
+python -m task_queue.cli status --detailed
+```
+
+### Sources Commands
+
+```bash
+# List Task Source Directories
+python -m task_queue.cli sources list
+
+# Add a custom Task Source Directory
+python -m task_queue.cli sources add /path/to/tasks --id my-queue \
+    --project-workspace /home/admin/workspaces/datachat \
+    --description "My custom queue"
 
 # Remove a Task Source Directory
-task-queue unload --source-id <id>
-
-# List Task Source Directories
-task-queue list-sources
+python -m task_queue.cli sources rm --source-id my-queue
 ```
 
-### Task Operations
+### Tasks Commands
 
 ```bash
-# Run tasks (manual execution)
-task-queue run [--cycles N]  # N=0 for infinite
+# Show task document path (simple output with reminder)
+python -m task_queue.cli tasks show task-20260207-120000
+
+# Show task result logs path
+python -m task_queue.cli tasks logs task-20260207-120000
+
+# Cancel a running task
+python -m task_queue.cli tasks cancel task-20260207-120000
 ```
 
-### Monitoring
+### Workers Commands
 
 ```bash
-# Show system status
-task-queue status
+# Show detailed worker status
+python -m task_queue.cli workers status
+
+# List workers summary
+python -m task_queue.cli workers list
+```
+
+### Logs Command
+
+```bash
+# Show daemon logs (exit with Ctrl+C)
+python -m task_queue.cli logs
+
+# Follow logs live
+python -m task_queue.cli logs --follow
+
+# Show last 50 lines
+python -m task_queue.cli logs --lines 50
+```
+
+### Testing Command
+
+```bash
+# Run interactively (for testing)
+python -m task_queue.cli run --cycles 5
 ```
 
 ## Configuration
@@ -191,45 +295,26 @@ Configuration file: `~/.config/task-queue/config.json`
 
 ```json
 {
-  "version": "2.0",
+  "version": "2.1",
   "project_workspace": "/home/admin/workspaces/datachat",
   "task_source_directories": [
     {
-      "id": "main",
-      "path": "/home/admin/workspaces/datachat/tasks/task-documents",
-      "description": "Main Task Source Directory",
-      "added_at": "2026-02-05T10:00:00.000000"
+      "id": "ad-hoc",
+      "path": "/home/admin/workspaces/datachat/tasks/ad-hoc/task-documents",
+      "description": "Quick, spontaneous tasks from conversation",
+      "added_at": "2026-02-07T00:00:00.000000"
     },
     {
-      "id": "experimental",
-      "path": "/home/admin/workspaces/datachat/tasks/experimental",
-      "description": "Experimental features",
-      "added_at": "2026-02-05T10:05:00.000000"
+      "id": "planned",
+      "path": "/home/admin/workspaces/datachat/tasks/planned/task-documents",
+      "description": "Organized, sequential tasks from planning docs",
+      "added_at": "2026-02-07T00:00:01.000000"
     }
   ],
-  "settings": {
-    "watch_enabled": true,
-    "watch_debounce_ms": 500,
-    "watch_patterns": ["task-*.md"],
-    "watch_recursive": false,
-    "max_attempts": 3,
-    "enable_file_hash": true
-  },
-  "created_at": "2026-02-05T10:00:00.000000",
-  "updated_at": "2026-02-05T10:00:00.000000"
+  "created_at": "2026-02-07T00:00:00.000000",
+  "updated_at": "2026-02-07T00:00:00.000000"
 }
 ```
-
-### Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `watch_enabled` | true | Enable watchdog for file system events |
-| `watch_debounce_ms` | 500 | Debounce delay in milliseconds for file events |
-| `watch_patterns` | ["task-*.md"] | File patterns to watch |
-| `watch_recursive` | false | Watch subdirectories |
-| `max_attempts` | 3 | Max execution attempts per task |
-| `enable_file_hash` | true | Track file hashes for change detection |
 
 ## Directory Structure
 
@@ -239,18 +324,19 @@ Configuration file: `~/.config/task-queue/config.json`
 
 {project-workspace}/            # Your project workspace
 └── tasks/
-    ├── task-documents/         # Task Source Directory (pending tasks)
-    │   ├── task-001.md
-    │   ├── task-002.md
-    │   └── .task-001.running   # Marker: task currently executing
-    ├── task-archive/           # Completed task documents
-    │   ├── task-001.md
-    │   └── task-002.md
-    ├── task-failed/            # Failed task documents
-    │   └── task-003.md
-    └── task-queue/             # Result JSON files (flat)
-        ├── task-001.json
-        └── task-002.json
+    ├── ad-hoc/                  # Ad-hoc queue
+    │   ├── task-staging/
+    │   ├── task-documents/      # Task Source Directory (pending)
+    │   │   ├── task-001.md
+    │   │   └── .task-002.lock   # Lock file for running task
+    │   ├── task-archive/        # Completed tasks
+    │   ├── task-failed/         # Failed tasks
+    │   ├── task-queue/          # Result JSON files
+    │   │   ├── task-001.json
+    │   │   └── task-002.json
+    │   └── task-reports/        # Worker reports
+    └── planned/                 # Planned queue
+        └── (same structure)
 ```
 
 ## Task Document Format
@@ -311,58 +397,6 @@ journalctl --user -u task-queue -n 100
 journalctl --user -u task-queue --since today
 ```
 
-### Log Examples
-
-```
-Feb 05 10:00:00 task-queue: ============================================================
-Feb 05 10:00:00 task-queue: Task Queue Daemon Starting
-Feb 05 10:00:00 task-queue: Configuration loaded from: ~/.config/task-queue/config.json
-Feb 05 10:00:00 task-queue: Project Workspace: /home/admin/workspaces/datachat
-Feb 05 10:00:00 task-queue: Task Source Directories: 2
-Feb 05 10:00:00 task-queue:   - main: /home/admin/workspaces/datachat/tasks/task-documents
-Feb 05 10:00:00 task-queue:   - experimental: /home/admin/workspaces/datachat/tasks/experimental
-Feb 05 10:00:00 task-queue: Spawning 2 worker threads (parallel execution)
-Feb 05 10:00:00 task-queue: Processing loop started (event-driven with watchdog)
-Feb 05 10:00:01 task-queue: Watchdog event: task-001.md in source 'main'
-Feb 05 10:00:01 task-queue: [Worker-main] Executing task: task-001.md
-Feb 05 10:00:10 task-queue: [Worker-main] [OK] Completed: task-001.md
-```
-
-## Workflow Example
-
-### Complete Workflow
-
-```bash
-# 1. Initialize configuration
-task-queue init
-
-# 2. Load Task Source Directories
-task-queue load --task-source-dir tasks/task-documents --project-workspace /home/admin/workspaces/datachat --source-id main
-task-queue load --task-source-dir tasks/experimental --project-workspace /home/admin/workspaces/datachat --source-id experimental
-
-# 3. Check registered sources
-task-queue list-sources
-
-# 4. Create task documents (watchdog auto-detects them)
-# Create files like: task-20260205-120000-feature-x.md
-
-# 5. Run tasks (manual)
-task-queue run
-
-# OR start daemon for automatic processing
-systemctl --user start task-queue
-
-# 6. Monitor progress
-journalctl --user -u task-queue -f
-```
-
-### Watchdog vs Manual Running
-
-| Approach | When to Use |
-|----------|-------------|
-| **Watchdog (daemon)** | Production, continuous operation |
-| **Manual Run** | One-off processing, testing, specific cycles |
-
 ## Task Execution
 
 ### Two-Agent Workflow
@@ -385,8 +419,8 @@ Each task is executed using a two-agent workflow via the `/task-worker` skill:
                              │
                              ▼
                     ┌─────────────────┐
-                    │  Create .running │
-                    │  marker file    │
+                    │ Create Lock File │
+                    │ .task-XXX.lock  │
                     └────────┬────────┘
                              │
                              ▼
@@ -402,12 +436,8 @@ Each task is executed using a two-agent workflow via the `/task-worker` skill:
                          │ Yes  │ No
                          │      │
                          ▼      ▼
-                  Move to    Move to
-               task-archive/  task-failed/
-                         │
-                         ▼
-                  Remove .running
-                  marker file
+              Delete Lock   Move to
+              + Archive    task-failed/
 ```
 
 ## JSON Result Files
@@ -415,7 +445,8 @@ Each task is executed using a two-agent workflow via the `/task-worker` skill:
 After each task execution, a JSON result file is automatically created at:
 
 ```
-{project-workspace}/tasks/task-queue/{task_id}.json
+{project-workspace}/tasks/ad-hoc/task-queue/{task_id}.json
+{project-workspace}/tasks/planned/task-queue/{task_id}.json
 ```
 
 ### Result File Structure
@@ -426,75 +457,36 @@ After each task execution, a JSON result file is automatically created at:
   "output": "Task execution output from Claude...",
   "error": "",
   "task_id": "task-20260206-105319",
+  "started_at": "2026-02-06T10:56:17.747530",
+  "completed_at": "2026-02-06T10:56:45.316864",
   "duration_ms": 8829,
   "duration_api_ms": 7785,
   "total_cost_usd": 0.176559,
   "usage": {
     "input_tokens": 25836,
-    "cache_creation_input_tokens": 0,
     "cache_read_input_tokens": 81408,
-    "output_tokens": 267,
-    "server_tool_use": {
-      "web_search_requests": 0,
-      "web_fetch_requests": 0
-    },
-    "service_tier": "standard"
+    "output_tokens": 267
   },
   "session_id": "4e23bdf6-95b2-4856-ad69-5187d539b87a",
-  "num_turns": 4,
-  "started_at": "2026-02-06T10:56:17.747530",
-  "completed_at": "2026-02-06T10:56:45.316864"
+  "num_turns": 4
 }
 ```
-
-### Field Descriptions
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | boolean | Whether task completed successfully |
-| `output` | string | Full text output from Claude Agent SDK |
-| `error` | string | Error message if task failed |
-| `task_id` | string | Task identifier |
-| `duration_ms` | integer | Total execution time in milliseconds |
-| `duration_api_ms` | integer | API call duration only (milliseconds) |
-| `total_cost_usd` | float | Cost in USD for this execution |
-| `usage` | object | Token usage statistics |
-| `session_id` | string | Session identifier for tracing |
-| `num_turns` | integer | Number of conversation turns |
-| `started_at` | string | ISO 8601 start timestamp |
-| `completed_at` | string | ISO 8601 completion timestamp |
 
 ### Viewing Results
 
 ```bash
 # List all result files
-ls tasks/task-queue/
+ls tasks/ad-hoc/task-queue/
 
 # View specific result
-cat tasks/task-queue/task-{id}.json
+cat tasks/ad-hoc/task-queue/task-{id}.json
 
 # View with pretty formatting (requires jq)
-cat tasks/task-queue/task-{id}.json | jq .
+cat tasks/ad-hoc/task-queue/task-{id}.json | jq .
 
 # Check recent results
-ls -lt tasks/task-queue/ | head -10
-
-# Find all failed tasks
-grep -l '"success": false' tasks/task-queue/*.json
-
-# Calculate total cost
-jq '[.total_cost_usd] | add' tasks/task-queue/*.json
+ls -lt tasks/ad-hoc/task-queue/ | head -10
 ```
-
-### Use Cases
-
-| Use Case | How To |
-|----------|--------|
-| **Cost Tracking** | Sum `total_cost_usd` across tasks |
-| **Performance Analysis** | Review `duration_ms` to identify slow tasks |
-| **Usage Analytics** | Track token consumption via `usage` object |
-| **Session Tracing** | Use `session_id` to correlate related operations |
-| **Debugging** | Review `output` and `error` fields for failed tasks |
 
 ## Troubleshooting
 
@@ -503,15 +495,18 @@ jq '[.total_cost_usd] | add' tasks/task-queue/*.json
 #### Issue: "No Project Workspace set"
 
 ```bash
-# Solution: Use the load command with --project-workspace
-task-queue load --task-source-dir <path> --project-workspace /path/to/project --source-id <id>
+# Solution: Use init command
+python -m task_queue.cli init
 ```
 
 #### Issue: "No Task Source Directories configured"
 
 ```bash
-# Solution: Load a Task Source Directory
-task-queue load --task-source-dir <path> --project-workspace /path/to/project --source-id <id>
+# Solution: Use init command
+python -m task_queue.cli init
+
+# Or add manually
+python -m task_queue.cli sources add /path/to/tasks --id my-queue
 ```
 
 #### Issue: Daemon shows "No pending tasks"
@@ -521,25 +516,18 @@ task-queue load --task-source-dir <path> --project-workspace /path/to/project --
 # Watchdog will auto-detect new files
 ```
 
-#### Issue: Task stuck with .running marker
+#### Issue: Task stuck with lock file
 
 ```bash
-# Solution: The daemon auto-detects stale markers and cleans them up
-# To manually clear: remove the .task-XXX.running file
-rm tasks/task-documents/.task-XXX.running
-```
+# Check lock file
+ls tasks/ad-hoc/task-documents/.task-*.lock
 
-#### Issue: Task failed
+# Check if process is still running
+cat ~/.config/task-queue/config.json
 
-```bash
-# Check failed task document
-cat tasks/task-failed/task-XXX.md
-
-# Check result file
-cat tasks/task-queue/task-XXX.json
-
-# View daemon logs
-journalctl --user -u task-queue -n 50
+# If process is dead, daemon will clean up stale locks automatically
+# Or manually remove the lock file
+rm tasks/ad-hoc/task-documents/.task-XXX.lock
 ```
 
 ## Development
@@ -550,25 +538,15 @@ journalctl --user -u task-queue -n 50
 task-queue/
 ├── task_queue/
 │   ├── __init__.py           # Package exports
-│   ├── atomic.py             # AtomicFileWriter, FileLock
-│   ├── cli.py                # CLI commands
+│   ├── cli.py                # CLI commands (grouped structure)
 │   ├── config.py             # ConfigManager
 │   ├── daemon.py             # Daemon service with parallel workers
-│   ├── executor.py           # Claude Agent SDK executor, saves JSON results
+│   ├── executor.py           # Claude Agent SDK executor, lock file handling
 │   ├── models.py             # Pydantic models (v2.0)
-│   ├── scanner.py            # Task document scanner
 │   └── task_runner.py        # Task execution logic
 ├── tests/                    # Unit tests
-│   ├── conftest.py           # Test fixtures
-│   ├── test_atomic.py
-│   ├── test_config.py
-│   ├── test_daemon_parallel.py  # Parallel execution tests
-│   ├── test_executor.py
-│   ├── test_models.py
-│   ├── test_scanner.py
-│   └── test_task_runner.py      # Task runner tests
+│   └── test_cli_grouped_commands.py  # CLI test suite
 ├── README.md                 # This file
-├── pyproject.toml           # Python package config
 └── task-queue.service       # Systemd service file
 ```
 
@@ -581,14 +559,10 @@ python -m pytest tests/
 # Run with coverage
 python -m pytest --cov=task_queue tests/
 
-# Run specific test file
-python -m pytest tests/test_daemon_parallel.py -v
+# Run CLI tests
+python tests/test_cli_grouped_commands.py
 ```
 
 ## License
 
 MIT License - See LICENSE file for details.
-
-## Contributing
-
-This is an internal project for the DataChat system. For questions or issues, please contact the development team.
