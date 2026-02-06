@@ -56,6 +56,7 @@ Execution Model:
 | **Sequential Within Source** | Tasks from same source execute one at a time (FIFO) |
 | **Parallel Across Sources** | Different sources execute simultaneously |
 | **Directory-Based State** | No state file - filesystem structure is the source of truth |
+| **JSON Result Files** | Captures execution metadata, cost, token usage per task |
 | **Auto-Load on Create** | Watchdog auto-detects new Task Documents |
 | **Manual Run** | Explicit control via `run` command |
 | **Unload by Source** | Remove all tasks from a specific source |
@@ -84,6 +85,7 @@ Execution Model:
 - **Running Markers**: `.task-XXX.running` files indicate task in progress
 - **Stale Detection**: Orphaned markers are cleaned up automatically
 - **Archive Preservation**: Completed/failed task specs preserved in directories
+- **Result Tracking**: JSON files capture execution metadata for every task
 - **Graceful Shutdown**: All workers stop cleanly on SIGTERM/SIGINT
 
 ## Installation
@@ -408,6 +410,92 @@ Each task is executed using a two-agent workflow via the `/task-worker` skill:
                   marker file
 ```
 
+## JSON Result Files
+
+After each task execution, a JSON result file is automatically created at:
+
+```
+{project-workspace}/tasks/task-queue/{task_id}.json
+```
+
+### Result File Structure
+
+```json
+{
+  "success": true,
+  "output": "Task execution output from Claude...",
+  "error": "",
+  "task_id": "task-20260206-105319",
+  "duration_ms": 8829,
+  "duration_api_ms": 7785,
+  "total_cost_usd": 0.176559,
+  "usage": {
+    "input_tokens": 25836,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 81408,
+    "output_tokens": 267,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard"
+  },
+  "session_id": "4e23bdf6-95b2-4856-ad69-5187d539b87a",
+  "num_turns": 4,
+  "started_at": "2026-02-06T10:56:17.747530",
+  "completed_at": "2026-02-06T10:56:45.316864"
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Whether task completed successfully |
+| `output` | string | Full text output from Claude Agent SDK |
+| `error` | string | Error message if task failed |
+| `task_id` | string | Task identifier |
+| `duration_ms` | integer | Total execution time in milliseconds |
+| `duration_api_ms` | integer | API call duration only (milliseconds) |
+| `total_cost_usd` | float | Cost in USD for this execution |
+| `usage` | object | Token usage statistics |
+| `session_id` | string | Session identifier for tracing |
+| `num_turns` | integer | Number of conversation turns |
+| `started_at` | string | ISO 8601 start timestamp |
+| `completed_at` | string | ISO 8601 completion timestamp |
+
+### Viewing Results
+
+```bash
+# List all result files
+ls tasks/task-queue/
+
+# View specific result
+cat tasks/task-queue/task-{id}.json
+
+# View with pretty formatting (requires jq)
+cat tasks/task-queue/task-{id}.json | jq .
+
+# Check recent results
+ls -lt tasks/task-queue/ | head -10
+
+# Find all failed tasks
+grep -l '"success": false' tasks/task-queue/*.json
+
+# Calculate total cost
+jq '[.total_cost_usd] | add' tasks/task-queue/*.json
+```
+
+### Use Cases
+
+| Use Case | How To |
+|----------|--------|
+| **Cost Tracking** | Sum `total_cost_usd` across tasks |
+| **Performance Analysis** | Review `duration_ms` to identify slow tasks |
+| **Usage Analytics** | Track token consumption via `usage` object |
+| **Session Tracing** | Use `session_id` to correlate related operations |
+| **Debugging** | Review `output` and `error` fields for failed tasks |
+
 ## Troubleshooting
 
 ### Common Issues
@@ -466,7 +554,7 @@ task-queue/
 │   ├── cli.py                # CLI commands
 │   ├── config.py             # ConfigManager
 │   ├── daemon.py             # Daemon service with parallel workers
-│   ├── executor.py           # Claude Agent SDK executor
+│   ├── executor.py           # Claude Agent SDK executor, saves JSON results
 │   ├── models.py             # Pydantic models (v2.0)
 │   ├── scanner.py            # Task document scanner
 │   └── task_runner.py        # Task execution logic

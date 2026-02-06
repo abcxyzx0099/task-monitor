@@ -6,12 +6,13 @@ No Task model - just execute task document files.
 """
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
-from dataclasses import dataclass, field
+from typing import Optional, Any, Dict
+from dataclasses import dataclass, field, asdict
 
 from dotenv import load_dotenv
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -29,18 +30,51 @@ _ENV_PATH = Path("/home/admin/workspaces/task-queue/.env")
 load_dotenv(_ENV_PATH, override=True)
 
 # Verify environment variables are loaded
-# Note: .env uses ANTHROPIC_AUTH_TOKEN, but bundled CLI expects ANTHROPIC_API_KEY
-_ANTHROPIC_AUTH_TOKEN = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+_ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 _ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 
 
 @dataclass
 class ExecutionResult:
-    """Result of task execution."""
+    """Result of task execution with SDK metadata."""
     success: bool
     output: str = ""
     error: str = ""
     task_id: str = ""
+    # SDK metadata
+    duration_ms: Optional[int] = None
+    duration_api_ms: Optional[int] = None
+    total_cost_usd: Optional[float] = None
+    usage: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = None
+    num_turns: Optional[int] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert result to dictionary for JSON serialization."""
+        data = asdict(self)
+        # Remove None values
+        return {k: v for k, v in data.items() if v is not None}
+
+    def save_to_file(self, project_workspace: Path) -> Path:
+        """
+        Save result as JSON file to tasks/task-queue/{task_id}.json
+
+        Args:
+            project_workspace: Path to project workspace
+
+        Returns:
+            Path to saved result file
+        """
+        result_dir = project_workspace / "tasks" / "task-queue"
+        result_dir.mkdir(parents=True, exist_ok=True)
+
+        result_file = result_dir / f"{self.task_id}.json"
+        with open(result_file, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+        return result_file
 
 
 class SyncTaskExecutor:
@@ -88,12 +122,15 @@ class SyncTaskExecutor:
 
         logger.info(f"[{task_id}] Task started: {relative_task_path}")
 
+        start_time = datetime.now()
+        started_at_str = start_time.isoformat()
+
         result = ExecutionResult(
             success=False,
-            task_id=task_id
+            task_id=task_id,
+            started_at=started_at_str
         )
 
-        start_time = datetime.now()
         task_complete = False
         full_output = []
 
@@ -108,8 +145,18 @@ class SyncTaskExecutor:
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
                 tools={"type": "preset", "preset": "claude_code"},
+                allowed_tools=[
+                    "Task",      # For spawning sub-agents (Implementation Agent, Auditor Agent)
+                    "Skill",     # For invoking skills
+                    "Read",      # For reading files
+                    "Write",     # For writing files
+                    "Edit",      # For editing files
+                    "Bash",      # For running commands
+                    "Glob",      # For file pattern matching
+                    "Grep",      # For searching content
+                ],
                 env={
-                    "ANTHROPIC_API_KEY": _ANTHROPIC_AUTH_TOKEN,
+                    "ANTHROPIC_API_KEY": _ANTHROPIC_API_KEY,
                     "ANTHROPIC_BASE_URL": _ANTHROPIC_BASE_URL
                 },
             )
@@ -136,15 +183,48 @@ Execute task at: {relative_task_path}
                         if message.subtype == 'success':
                             result.success = True
                             result.output = "\n".join(full_output) if full_output else ""
+
+                            # Capture SDK metadata from ResultMessage
+                            result.duration_ms = getattr(message, 'duration_ms', None)
+                            result.duration_api_ms = getattr(message, 'duration_api_ms', None)
+                            result.total_cost_usd = getattr(message, 'total_cost_usd', None)
+                            result.usage = getattr(message, 'usage', None)
+                            result.session_id = getattr(message, 'session_id', None)
+                            result.num_turns = getattr(message, 'num_turns', None)
+
                             duration = (datetime.now() - start_time).total_seconds()
+                            result.completed_at = datetime.now().isoformat()
                             logger.info(f"[{task_id}] Task completed in {duration:.1f}s")
+
+                            # Save result JSON file
+                            try:
+                                result_path = result.save_to_file(self.project_workspace)
+                                logger.info(f"[{task_id}] Result saved to: {result_path}")
+                            except Exception as e:
+                                logger.warning(f"[{task_id}] Failed to save result file: {e}")
+
                             task_complete = True
                             return
 
                         elif message.subtype == 'error':
                             result.success = False
                             result.error = message.result or "Task failed"
+                            result.completed_at = datetime.now().isoformat()
+
+                            # Also capture error metadata
+                            result.duration_ms = getattr(message, 'duration_ms', None)
+                            result.duration_api_ms = getattr(message, 'duration_api_ms', None)
+                            result.session_id = getattr(message, 'session_id', None)
+
                             logger.error(f"[{task_id}] Task failed: {result.error}")
+
+                            # Save result JSON file even for errors
+                            try:
+                                result_path = result.save_to_file(self.project_workspace)
+                                logger.info(f"[{task_id}] Error result saved to: {result_path}")
+                            except Exception as save_err:
+                                logger.warning(f"[{task_id}] Failed to save error result: {save_err}")
+
                             task_complete = True
                             return
                     else:
@@ -161,12 +241,22 @@ Execute task at: {relative_task_path}
             if not task_complete:
                 result.success = False
                 result.error = "Task cancelled"
+                result.completed_at = datetime.now().isoformat()
+                try:
+                    result.save_to_file(self.project_workspace)
+                except Exception:
+                    pass
 
         except Exception as e:
             if not task_complete:
                 result.success = False
                 result.error = f"{type(e).__name__}: {str(e)}"
+                result.completed_at = datetime.now().isoformat()
                 logger.error(f"[{task_id}] Task exception: {type(e).__name__}: {str(e)}")
+                try:
+                    result.save_to_file(self.project_workspace)
+                except Exception:
+                    pass
 
         return result
 
