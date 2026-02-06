@@ -92,9 +92,9 @@ class TestWorkerLoop:
         daemon._source_events["test"] = threading.Event()
 
         # Mock execute to return success and move to archive
-        def mock_execute(task_file, project_root=None):
+        def mock_execute(task_file, project_workspace=None):
             # Move to archive
-            archive_dir = Path(project_root) / "tasks" / "task-archive"
+            archive_dir = Path(project_workspace) / "tasks" / "task-archive"
             shutil.move(str(task_file), str(archive_dir / task_file.name))
             from task_queue.executor import ExecutionResult
             return ExecutionResult(success=True, task_id=task_file.stem)
