@@ -120,7 +120,7 @@ class TestTaskDocumentWatcher:
     @pytest.fixture
     def sample_source_dir(self, temp_dir):
         """Create a sample task source directory."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         return TaskSourceDirectory(
@@ -467,7 +467,7 @@ class TestWatchdogManager:
     @pytest.fixture
     def sample_source_dir(self, temp_dir):
         """Create a sample task source directory."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         return TaskSourceDirectory(

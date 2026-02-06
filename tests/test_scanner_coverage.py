@@ -62,7 +62,7 @@ class TestScanTaskSourceDirectory:
     def test_scan_with_valid_task_files(self, temp_dir):
         """Test scanning directory with valid task files."""
         # Create source directory
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create valid task files
@@ -86,7 +86,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_ignores_invalid_task_files(self, temp_dir):
         """Test that scanner ignores files with invalid task ID format."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create invalid task files
@@ -107,7 +107,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_sorts_by_filename(self, temp_dir):
         """Test that scan results are sorted by filename (chronological)."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create task files in non-chronological order
@@ -135,7 +135,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_with_file_hash_disabled(self, temp_dir):
         """Test scanning with file hash calculation disabled."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -155,7 +155,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_with_file_hash_enabled(self, temp_dir):
         """Test scanning with file hash calculation enabled."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         content = "# Test task"
@@ -182,7 +182,7 @@ class TestScanTaskSourceDirectory:
         """Test scanning handles OSError when reading file stats."""
         # This test verifies OSError handling in _create_discovered_task
         # We'll test the _create_discovered_task method directly
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -211,7 +211,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_includes_file_size(self, temp_dir):
         """Test that scan includes file size in discovered tasks."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         content = "# Test task\nSome content here"
@@ -232,7 +232,7 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_sets_discovered_at_timestamp(self, temp_dir):
         """Test that scan includes discovery timestamp."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         before_scan = datetime.now()
@@ -320,7 +320,7 @@ class TestIsFileModified:
 
     def test_is_modified_with_unknown_hash(self, temp_dir):
         """Test modification check with unknown (None) hash."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -334,7 +334,7 @@ class TestIsFileModified:
 
     def test_is_modified_with_different_hash(self, temp_dir):
         """Test modification check with different hash."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -348,7 +348,7 @@ class TestIsFileModified:
 
     def test_is_not_modified_with_same_hash(self, temp_dir):
         """Test modification check with same hash."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         content = "# Test task"
@@ -366,7 +366,7 @@ class TestIsFileModified:
 
     def test_is_modified_when_hash_disabled(self, temp_dir):
         """Test modification check when hash is disabled."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -384,7 +384,7 @@ class TestGetFileModificationTime:
 
     def test_get_modification_time_existing_file(self, temp_dir):
         """Test getting modification time for existing file."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -406,7 +406,7 @@ class TestGetFileModificationTime:
 
     def test_get_modification_time_handles_oserror(self, temp_dir):
         """Test getting modification time handles OSError."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -426,7 +426,7 @@ class TestCalculateHash:
 
     def test_calculate_hash_public_method(self, temp_dir):
         """Test public calculate_hash method."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         content = "# Test task content"
@@ -442,7 +442,7 @@ class TestCalculateHash:
 
     def test_calculate_hash_empty_file(self, temp_dir):
         """Test hash calculation for empty file."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -456,7 +456,7 @@ class TestCalculateHash:
 
     def test_calculate_hash_large_file(self, temp_dir):
         """Test hash calculation for large file (tests chunked reading)."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create a file larger than one chunk (4096 bytes)
@@ -472,7 +472,7 @@ class TestCalculateHash:
 
     def test_calculate_hash_handles_oserror(self, temp_dir):
         """Test hash calculation handles OSError."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"
@@ -493,7 +493,7 @@ class TestFindTaskFiles:
 
     def test_find_task_files_in_directory(self, temp_dir):
         """Test finding task files in directory."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create task files and other files
@@ -511,7 +511,7 @@ class TestFindTaskFiles:
 
     def test_find_task_files_ignores_directories(self, temp_dir):
         """Test that _find_task_files ignores directories matching pattern."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         # Create a directory that matches the pattern
@@ -532,7 +532,7 @@ class TestCreateDiscoveredTask:
 
     def test_create_discovered_task_valid(self, temp_dir):
         """Test creating DiscoveredTask from valid file."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test-task.md"
@@ -548,7 +548,7 @@ class TestCreateDiscoveredTask:
 
     def test_create_discovered_task_invalid_id(self, temp_dir):
         """Test creating DiscoveredTask with invalid task ID returns None."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         invalid_file = source_path / "invalid-name.md"
@@ -561,7 +561,7 @@ class TestCreateDiscoveredTask:
 
     def test_create_discovered_task_with_zero_byte_file(self, temp_dir):
         """Test creating DiscoveredTask from zero-byte file."""
-        source_path = temp_dir / "tasks" / "task-documents"
+        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_path.mkdir(parents=True)
 
         task_file = source_path / "task-20260206-120000-test.md"

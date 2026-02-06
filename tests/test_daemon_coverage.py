@@ -301,7 +301,7 @@ class TestWorkerLoopEdgeCases:
 
     def test_worker_loop_with_no_event(self, temp_dir):
         """Test worker loop when no event is found for source."""
-        source_dir = temp_dir / "tasks" / "task-documents"
+        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_dir.mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
@@ -321,7 +321,7 @@ class TestWorkerLoopEdgeCases:
 
     def test_worker_loop_handles_exception(self, temp_dir):
         """Test worker loop handles exceptions gracefully."""
-        source_dir = temp_dir / "tasks" / "task-documents"
+        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_dir.mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
@@ -356,7 +356,7 @@ class TestWorkerLoopEdgeCases:
 
     def test_worker_loop_with_no_tasks(self, temp_dir):
         """Test worker loop when there are no tasks."""
-        source_dir = temp_dir / "tasks" / "task-documents"
+        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_dir.mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
@@ -385,7 +385,7 @@ class TestWorkerLoopEdgeCases:
 
     def test_worker_loop_respects_shutdown_flag(self, temp_dir):
         """Test that worker loop exits when shutdown is requested."""
-        source_dir = temp_dir / "tasks" / "task-documents"
+        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_dir.mkdir(parents=True)
 
         daemon = TaskQueueDaemon()

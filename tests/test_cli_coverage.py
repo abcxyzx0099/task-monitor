@@ -15,7 +15,7 @@ from io import StringIO
 import sys
 
 from task_queue.cli import (
-    cmd_status, cmd_register, cmd_list_sources, cmd_unregister,
+    cmd_status, cmd_sources_add, cmd_sources_list, cmd_sources_rm,
     cmd_run, _restart_daemon, main
 )
 from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
@@ -176,7 +176,7 @@ class TestCmdStatusEdgeCases:
         """Test cmd_status shows task statistics."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            task_dir = workspace / "tasks" / "task-documents"
+            task_dir = workspace / "tasks" / "ad-hoc" / "pending"
             task_dir.mkdir(parents=True)
 
             # Create some task files
@@ -229,9 +229,9 @@ class TestCmdStatusEdgeCases:
 
 
 class TestCmdListSourcesEdgeCases:
-    """Tests for cmd_list_sources edge cases."""
+    """Tests for cmd_sources_list edge cases."""
 
-    def test_cmd_list_sources_empty(self, temp_dir):
+    def test_cmd_sources_list_empty(self, temp_dir):
         """Test list-sources with no sources configured."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             config = {
@@ -256,7 +256,7 @@ class TestCmdListSourcesEdgeCases:
             sys.stdout = StringIO()
 
             try:
-                result = cmd_list_sources(args)
+                result = cmd_sources_list(args)
                 output = sys.stdout.getvalue()
             finally:
                 sys.stdout = old_stdout
@@ -267,11 +267,11 @@ class TestCmdListSourcesEdgeCases:
         finally:
             Path(config_path).unlink(missing_ok=True)
 
-    def test_cmd_list_sources_config_error(self, capsys):
+    def test_cmd_sources_list_config_error(self, capsys):
         """Test list-sources handles config errors."""
         args = MagicMock(config="/nonexistent/config.json")
 
-        result = cmd_list_sources(args)
+        result = cmd_sources_list(args)
 
         assert result == 1
         captured = capsys.readouterr()
@@ -285,7 +285,7 @@ class TestCmdRun:
     def run_config(self, temp_dir):
         """Create a config for run command testing."""
         workspace = temp_dir / "workspace"
-        task_dir = workspace / "tasks" / "task-documents"
+        task_dir = workspace / "tasks" / "ad-hoc" / "pending"
         task_dir.mkdir(parents=True)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -551,10 +551,10 @@ class TestMainFunction:
 
 
 class TestCmdRegisterEdgeCases:
-    """Additional tests for cmd_register error handling."""
+    """Additional tests for cmd_sources_add error handling."""
 
-    def test_cmd_register_exception_handling(self, temp_dir, capsys):
-        """Test cmd_register handles exceptions."""
+    def test_cmd_sources_add_exception_handling(self, temp_dir, capsys):
+        """Test cmd_sources_add handles exceptions."""
         # Use invalid workspace path
         args = MagicMock(
             config="/nonexistent/config.json",
@@ -563,7 +563,7 @@ class TestCmdRegisterEdgeCases:
             source_id="test"
         )
 
-        result = cmd_register(args)
+        result = cmd_sources_add(args)
 
         assert result == 1
         captured = capsys.readouterr()
@@ -571,16 +571,16 @@ class TestCmdRegisterEdgeCases:
 
 
 class TestCmdUnregisterEdgeCases:
-    """Additional tests for cmd_unregister error handling."""
+    """Additional tests for cmd_sources_rm error handling."""
 
-    def test_cmd_unregister_exception_handling(self, capsys):
-        """Test cmd_unregister handles exceptions."""
+    def test_cmd_sources_rm_exception_handling(self, capsys):
+        """Test cmd_sources_rm handles exceptions."""
         args = MagicMock(
             config="/nonexistent/config.json",
             source_id="test"
         )
 
-        result = cmd_unregister(args)
+        result = cmd_sources_rm(args)
 
         assert result == 1
         captured = capsys.readouterr()

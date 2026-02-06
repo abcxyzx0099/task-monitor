@@ -2,9 +2,12 @@
 Task Runner for directory-based state architecture.
 
 No state file - directory structure is the source of truth:
-- tasks/task-documents/  - pending tasks
-- tasks/task-archive/    - completed tasks
-- tasks/task-failed/    - failed tasks
+- tasks/ad-hoc/pending/       - pending ad-hoc tasks
+- tasks/ad-hoc/completed/     - completed ad-hoc tasks
+- tasks/ad-hoc/failed/        - failed ad-hoc tasks
+- tasks/planned/pending/      - pending planned tasks
+- tasks/planned/completed/    - completed planned tasks
+- tasks/planned/failed/       - failed planned tasks
 """
 
 import os
@@ -38,15 +41,28 @@ class TaskRunner:
         """
         self.project_workspace = Path(project_workspace).resolve()
 
-        # Create necessary directories
-        self.archive_dir = self.project_workspace / "tasks" / "task-archive"
-        self.archive_dir.mkdir(parents=True, exist_ok=True)
-
-        self.failed_dir = self.project_workspace / "tasks" / "task-failed"
-        self.failed_dir.mkdir(parents=True, exist_ok=True)
-
         # Executor for running tasks
         self.executor = SyncTaskExecutor()
+
+    def _get_queue_dirs(self, worker: str) -> tuple[Path, Path]:
+        """
+        Get archive and failed directories for a specific worker/queue.
+
+        Args:
+            worker: Worker name (e.g., "ad-hoc", "planned")
+
+        Returns:
+            Tuple of (archive_dir, failed_dir)
+        """
+        if "ad-hoc" in worker.lower():
+            base = self.project_workspace / "tasks" / "ad-hoc"
+        else:
+            base = self.project_workspace / "tasks" / "planned"
+
+        return (
+            base / "completed",
+            base / "failed"
+        )
 
     def pick_next_task(
         self,
@@ -125,7 +141,7 @@ class TaskRunner:
         """
         Execute a task using the SyncTaskExecutor.
 
-        Executes task and moves to archive/failed.
+        Executes task and moves to completed/failed.
 
         Args:
             task_file: Path to task document
@@ -135,6 +151,9 @@ class TaskRunner:
             Result dict with status and error info
         """
         task_id = task_file.stem
+
+        # Get per-queue directories
+        archive_dir, failed_dir = self._get_queue_dirs(worker)
 
         try:
             # Execute the task
@@ -146,9 +165,9 @@ class TaskRunner:
 
             # Task completed - handle result
             if result.success:
-                # Move to archive
+                # Move to completed
                 try:
-                    shutil.move(str(task_file), str(self.archive_dir / task_file.name))
+                    shutil.move(str(task_file), str(archive_dir / task_file.name))
                 except OSError as e:
                     return {
                         "status": "warning",
@@ -158,7 +177,7 @@ class TaskRunner:
             else:
                 # Move to failed directory
                 try:
-                    failed_file = self.failed_dir / task_file.name
+                    failed_file = failed_dir / task_file.name
                     shutil.move(str(task_file), str(failed_file))
 
                     # Add error info to task document
@@ -182,7 +201,7 @@ class TaskRunner:
             # Exception during execution
             try:
                 # Move to failed directory
-                failed_file = self.failed_dir / task_file.name
+                failed_file = failed_dir / task_file.name
                 shutil.move(str(task_file), str(failed_file))
             except OSError:
                 pass
@@ -229,13 +248,16 @@ class TaskRunner:
                 if task_file.is_file():
                     source_stats["pending"] += 1
 
+            # Get per-queue directories for this source
+            archive_dir, failed_dir = self._get_queue_dirs(source_dir.id)
+
             # Count completed in archive
-            if self.archive_dir.exists():
-                source_stats["completed"] = len(list(self.archive_dir.glob("task-*.md")))
+            if archive_dir.exists():
+                source_stats["completed"] = len(list(archive_dir.glob("task-*.md")))
 
             # Count failed
-            if self.failed_dir.exists():
-                source_stats["failed"] = len(list(self.failed_dir.glob("task-*.md")))
+            if failed_dir.exists():
+                source_stats["failed"] = len(list(failed_dir.glob("task-*.md")))
 
             stats["sources"][source_dir.id] = source_stats
             stats["pending"] += source_stats["pending"]

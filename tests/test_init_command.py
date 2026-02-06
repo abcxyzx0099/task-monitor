@@ -150,19 +150,20 @@ class TestInitCommand:
 
         # Check directories were created
         base = Path(self.temp_dir) / "tasks"
-        self.assert_dir_exists(base / "ad-hoc" / "task-staging", "ad-hoc staging")
-        self.assert_dir_exists(base / "ad-hoc" / "task-documents", "ad-hoc documents")
-        self.assert_dir_exists(base / "ad-hoc" / "task-archive", "ad-hoc archive")
-        self.assert_dir_exists(base / "ad-hoc" / "task-failed", "ad-hoc failed")
-        self.assert_dir_exists(base / "ad-hoc" / "task-queue", "ad-hoc queue")
-        self.assert_dir_exists(base / "ad-hoc" / "task-reports", "ad-hoc reports")
+        self.assert_dir_exists(base / "ad-hoc" / "staging", "ad-hoc staging")
+        self.assert_dir_exists(base / "ad-hoc" / "pending", "ad-hoc pending")
+        self.assert_dir_exists(base / "ad-hoc" / "completed", "ad-hoc completed")
+        self.assert_dir_exists(base / "ad-hoc" / "failed", "ad-hoc failed")
+        self.assert_dir_exists(base / "ad-hoc" / "results", "ad-hoc results")
+        self.assert_dir_exists(base / "ad-hoc" / "reports", "ad-hoc reports")
 
-        self.assert_dir_exists(base / "planned" / "task-staging", "planned staging")
-        self.assert_dir_exists(base / "planned" / "task-documents", "planned documents")
-        self.assert_dir_exists(base / "planned" / "task-archive", "planned archive")
-        self.assert_dir_exists(base / "planned" / "task-failed", "planned failed")
-        self.assert_dir_exists(base / "planned" / "task-queue", "planned queue")
-        self.assert_dir_exists(base / "planned" / "task-reports", "planned reports")
+        self.assert_dir_exists(base / "planned" / "staging", "planned staging")
+        self.assert_dir_exists(base / "planned" / "pending", "planned pending")
+        self.assert_dir_exists(base / "planned" / "completed", "planned completed")
+        self.assert_dir_exists(base / "planned" / "failed", "planned failed")
+        self.assert_dir_exists(base / "planned" / "results", "planned results")
+        self.assert_dir_exists(base / "planned" / "reports", "planned reports")
+        self.assert_dir_exists(base / "planned" / "planning", "planned planning")
 
         # Check output contains expected messages
         self.assert_in_output(result.stdout, "✅ Initialization complete!", "Completion message")
@@ -214,7 +215,7 @@ class TestInitCommand:
         self.run_init_command(args="", cwd=self.temp_dir)
 
         # Add a file to one of the directories to verify it survives
-        test_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "task-documents" / "test-file.txt"
+        test_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "pending" / "test-file.txt"
         test_file.write_text("test content")
 
         # Force re-init

@@ -53,9 +53,9 @@ class TestCLICommands:
             workspace = Path(tmpdir)
             # Create task directories
             (workspace / "tasks").mkdir()
-            (workspace / "tasks" / "task-documents").mkdir()
-            (workspace / "tasks" / "task-archive").mkdir()
-            (workspace / "tasks" / "task-failed").mkdir()
+            (workspace / "tasks" / "ad-hoc" / "pending").mkdir(parents=True)
+            (workspace / "tasks" / "ad-hoc" / "completed").mkdir(parents=True)
+            (workspace / "tasks" / "ad-hoc" / "failed").mkdir(parents=True)
             yield workspace
 
     @pytest.fixture
@@ -79,17 +79,16 @@ class TestCLICommands:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
             config_file = config_dir / "test-config.json"
-            task_source_dir = temp_workspace / "tasks" / "task-documents"
+            task_source_dir = temp_workspace / "tasks" / "ad-hoc" / "pending"
 
-            # Run register command
+            # Run sources add command
             result = subprocess.run(
                 [
                     "python3", "-m", "task_queue.cli",
                     "--config", str(config_file),
-                    "register",
-                    "--task-source-dir", str(task_source_dir),
-                    "--project-workspace", str(temp_workspace),
-                    "--source-id", "test-source"
+                    "sources", "add", str(task_source_dir),
+                    "--id", "test-source",
+                    "--project-workspace", str(temp_workspace)
                 ],
                 capture_output=True,
                 text=True,
@@ -110,19 +109,20 @@ class TestCLICommands:
     def test_register_adds_source(self, temp_config, temp_workspace, mock_systemctl):
         """Test that register adds a source directory to config."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_register
+        from task_queue.cli import cmd_sources_add
         from argparse import Namespace
 
-        # Create args
+        # Create args - sources add uses 'id' not 'source_id'
         args = Namespace(
             config=temp_config,
-            task_source_dir=str(temp_workspace / "tasks" / "task-documents"),
+            task_source_dir=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
             project_workspace=str(temp_workspace),
-            source_id="test-source"
+            id="test-source",
+            description=None  # Optional description
         )
 
         # Run register command
-        result = cmd_register(args)
+        result = cmd_sources_add(args)
 
         assert result == 0
 
@@ -131,22 +131,23 @@ class TestCLICommands:
         config = config_manager.config
         assert len(config.task_source_directories) == 1
         assert config.task_source_directories[0].id == "test-source"
-        assert config.task_source_directories[0].path == str(temp_workspace / "tasks" / "task-documents")
+        assert config.task_source_directories[0].path == str(temp_workspace / "tasks" / "ad-hoc" / "pending")
 
     def test_unregister_removes_source(self, temp_config, temp_workspace, mock_systemctl):
-        """Test that unregister removes a source directory from config."""
+        """Test that sources rm removes a source directory from config."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_register, cmd_unregister
+        from task_queue.cli import cmd_sources_add, cmd_sources_rm
         from argparse import Namespace
 
-        # First register a source
+        # First register a source - sources add uses 'id' not 'source_id'
         args_reg = Namespace(
             config=temp_config,
-            task_source_dir=str(temp_workspace / "tasks" / "task-documents"),
+            task_source_dir=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
             project_workspace=str(temp_workspace),
-            source_id="test-source"
+            id="test-source",
+            description=None  # Optional description
         )
-        result = cmd_register(args_reg)
+        result = cmd_sources_add(args_reg)
         assert result == 0
 
         # Verify source was added - reload from file
@@ -158,7 +159,7 @@ class TestCLICommands:
             config=temp_config,
             source_id="test-source"
         )
-        result = cmd_unregister(args_unreg)
+        result = cmd_sources_rm(args_unreg)
 
         assert result == 0
 
@@ -167,9 +168,9 @@ class TestCLICommands:
         assert len(config_manager.config.task_source_directories) == 0
 
     def test_unregister_nonexistent_source(self, temp_config):
-        """Test that unregister handles non-existent sources gracefully."""
+        """Test that sources rm handles non-existent sources gracefully."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_unregister
+        from task_queue.cli import cmd_sources_rm
         from argparse import Namespace
 
         args = Namespace(
@@ -177,7 +178,7 @@ class TestCLICommands:
             source_id="nonexistent"
         )
 
-        result = cmd_unregister(args)
+        result = cmd_sources_rm(args)
 
         # Should return error code
         assert result == 1
@@ -231,11 +232,11 @@ class TestCLICommands:
         config_manager = ConfigManager(Path(temp_config))
         config_manager.set_project_workspace(str(temp_workspace))
         config_manager.add_task_source_directory(
-            path=str(temp_workspace / "tasks" / "task-documents"),
+            path=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
             id="test-source"
         )
 
-        args = Namespace(config=temp_config)
+        args = Namespace(config=temp_config, detailed=False)
 
         # Capture stdout
         old_stdout = sys.stdout
@@ -252,9 +253,9 @@ class TestCLICommands:
         assert "test-source" in output
 
     def test_list_sources_command(self, temp_config, temp_workspace):
-        """Test list-sources command."""
+        """Test sources list command."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_list_sources
+        from task_queue.cli import cmd_sources_list
         from argparse import Namespace
         from io import StringIO
         import sys
@@ -262,18 +263,18 @@ class TestCLICommands:
         config_manager = ConfigManager(Path(temp_config))
         config_manager.set_project_workspace(str(temp_workspace))
         config_manager.add_task_source_directory(
-            path=str(temp_workspace / "tasks" / "task-documents"),
+            path=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
             id="test-source"
         )
 
-        args = Namespace(config=temp_config)
+        args = Namespace(config=temp_config, detailed=False)
 
         # Capture stdout
         old_stdout = sys.stdout
         sys.stdout = StringIO()
 
         try:
-            result = cmd_list_sources(args)
+            result = cmd_sources_list(args)
             output = sys.stdout.getvalue()
         finally:
             sys.stdout = old_stdout
@@ -336,8 +337,8 @@ class TestCLIIntegration:
                 workspace = Path(workspace_dir)
                 # Create task directories
                 (workspace / "tasks").mkdir()
-                (workspace / "tasks" / "task-documents").mkdir()
-                task_source_dir = workspace / "tasks" / "task-documents"
+                (workspace / "tasks" / "ad-hoc" / "pending").mkdir(parents=True)
+                task_source_dir = workspace / "tasks" / "ad-hoc" / "pending"
 
                 # Mock systemctl to avoid actual service restart
                 original_run = subprocess.run
@@ -349,30 +350,28 @@ class TestCLIIntegration:
                     return original_run(cmd, *args, **kwargs)
 
                 with patch('subprocess.run', side_effect=mock_run):
-                    # 1. Register
+                    # 1. Register (sources add)
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "register",
-                            "--task-source-dir", str(task_source_dir),
-                            "--project-workspace", str(workspace),
-                            "--source-id", "test"
+                            "sources", "add", str(task_source_dir),
+                            "--id", "test",
+                            "--project-workspace", str(workspace)
                         ],
                         capture_output=True,
                         text=True,
                         cwd="/home/admin/workspaces/task-queue"
                     )
 
-                    assert "Registered" in result.stdout
-                    assert "Restarting daemon" in result.stdout
+                    assert "Added" in result.stdout
 
                     # 2. List sources
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "list-sources"
+                            "sources", "list"
                         ],
                         capture_output=True,
                         text=True,
@@ -381,12 +380,12 @@ class TestCLIIntegration:
 
                     assert "test" in result.stdout
 
-                    # 3. Unregister
+                    # 3. Remove (sources rm)
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "unregister",
+                            "sources", "rm",
                             "--source-id", "test"
                         ],
                         capture_output=True,
@@ -394,8 +393,7 @@ class TestCLIIntegration:
                         cwd="/home/admin/workspaces/task-queue"
                     )
 
-                    assert "Unregistered" in result.stdout
-                    assert "Restarting daemon" in result.stdout
+                    assert "Removed" in result.stdout
 
 
 if __name__ == "__main__":

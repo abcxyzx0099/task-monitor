@@ -60,15 +60,15 @@ def cmd_init(args):
     queues = [
         {
             "id": "ad-hoc",
-            "path": project_workspace / "tasks" / "ad-hoc" / "task-documents",
+            "path": project_workspace / "tasks" / "ad-hoc" / "pending",
             "description": "Quick, spontaneous tasks from conversation",
-            "subdirs": ["task-staging", "task-documents", "task-archive", "task-failed", "task-queue", "task-reports"]
+            "subdirs": ["staging", "pending", "completed", "failed", "results", "reports", "planning"]
         },
         {
             "id": "planned",
-            "path": project_workspace / "tasks" / "planned" / "task-documents",
+            "path": project_workspace / "tasks" / "planned" / "pending",
             "description": "Organized, sequential tasks from planning docs",
-            "subdirs": ["task-staging", "task-documents", "task-archive", "task-failed", "task-queue", "task-reports"]
+            "subdirs": ["staging", "pending", "completed", "failed", "results", "reports", "planning"]
         }
     ]
 
@@ -263,8 +263,8 @@ def _print_detailed_status(config, task_runner, source_dirs):
         else:
             base = workspace / "tasks" / "planned"
 
-        completed = list((base / "task-archive").glob("task-*.md")) if (base / "task-archive").exists() else []
-        failed = list((base / "task-failed").glob("task-*.md")) if (base / "task-failed").exists() else []
+        completed = list((base / "completed").glob("task-*.md")) if (base / "completed").exists() else []
+        failed = list((base / "failed").glob("task-*.md")) if (base / "failed").exists() else []
 
         print(f"\n📊 Statistics:")
         print(f"   Completed: {len(completed)}")
@@ -391,7 +391,7 @@ def _find_task_file(task_id: str, config) -> Path:
             base = workspace / "tasks" / "ad-hoc"
         else:
             base = workspace / "tasks" / "planned"
-        for subdir in ["task-archive", "task-failed"]:
+        for subdir in ["completed", "failed"]:
             task_file = base / subdir / f"{task_id}.md"
             if task_file.exists():
                 return task_file
@@ -432,9 +432,9 @@ def cmd_tasks_logs(args):
 
     # Try to find result JSON file
     result_dirs = [
-        workspace / "tasks" / "ad-hoc" / "task-queue",
-        workspace / "tasks" / "planned" / "task-queue",
-        workspace / "tasks" / "task-queue",
+        workspace / "tasks" / "ad-hoc" / "results",
+        workspace / "tasks" / "planned" / "results",
+        workspace / "tasks" / "results",
     ]
 
     result_file = None
@@ -517,9 +517,9 @@ def cmd_tasks_cancel(args):
             # Move task to failed directory
             workspace = Path(config.project_workspace)
             if "ad-hoc" in lock_info.worker:
-                failed_dir = workspace / "tasks" / "ad-hoc" / "task-failed"
+                failed_dir = workspace / "tasks" / "ad-hoc" / "failed"
             else:
-                failed_dir = workspace / "tasks" / "planned" / "task-failed"
+                failed_dir = workspace / "tasks" / "planned" / "failed"
 
             failed_dir.mkdir(parents=True, exist_ok=True)
             import shutil
@@ -606,8 +606,8 @@ def cmd_workers_status(args):
         else:
             base = workspace / "tasks" / "planned"
 
-        archive = base / "task-archive"
-        failed = base / "task-failed"
+        archive = base / "completed"
+        failed = base / "failed"
 
         completed = len(list(archive.glob("task-*.md"))) if archive.exists() else 0
         failed_count = len(list(failed.glob("task-*.md"))) if failed.exists() else 0

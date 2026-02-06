@@ -30,8 +30,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file at module import time
-_ENV_PATH = Path("/home/admin/workspaces/task-queue/.env")
-load_dotenv(_ENV_PATH, override=True)
+# Try to find .env in the task-queue package directory or its parent
+try:
+    # Get the directory containing this module
+    _MODULE_DIR = Path(__file__).parent.parent
+    _ENV_PATH = _MODULE_DIR / ".env"
+    if not _ENV_PATH.exists():
+        # Fallback to current working directory
+        _ENV_PATH = Path.cwd() / ".env"
+    load_dotenv(_ENV_PATH, override=True)
+except Exception:
+    # If all else fails, try loading from cwd
+    load_dotenv(override=True)
 
 # Verify environment variables are loaded
 _ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -142,7 +152,7 @@ class ExecutionResult:
 
     def save_to_file(self, project_workspace: Path) -> Path:
         """
-        Save result as JSON file to tasks/task-queue/{task_id}.json
+        Save result as JSON file to tasks/ad-hoc/results/ or tasks/planned/results/{task_id}.json
 
         Args:
             project_workspace: Path to project workspace
@@ -150,7 +160,9 @@ class ExecutionResult:
         Returns:
             Path to saved result file
         """
-        result_dir = project_workspace / "tasks" / "task-queue"
+        # For backward compatibility, save to flat task-queue directory
+        # The actual queue selection happens based on where the result file is placed
+        result_dir = project_workspace / "tasks" / "results"
         result_dir.mkdir(parents=True, exist_ok=True)
 
         result_file = result_dir / f"{self.task_id}.json"

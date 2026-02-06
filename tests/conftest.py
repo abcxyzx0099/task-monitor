@@ -23,9 +23,9 @@ def temp_dir():
 @pytest.fixture
 def project_root(temp_dir):
     """Create a mock project root with task directories."""
-    task_spec_dir = temp_dir / "tasks" / "task-documents"
-    task_archive_dir = temp_dir / "tasks" / "task-archive"
-    task_failed_dir = temp_dir / "tasks" / "task-failed"
+    task_spec_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
+    task_archive_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
+    task_failed_dir = temp_dir / "tasks" / "ad-hoc" / "failed"
 
     task_spec_dir.mkdir(parents=True)
     task_archive_dir.mkdir(parents=True)
@@ -37,25 +37,25 @@ def project_root(temp_dir):
 @pytest.fixture
 def task_source_dir(project_root):
     """Get the task source directory."""
-    return project_root / "tasks" / "task-documents"
+    return project_root / "tasks" / "ad-hoc" / "pending"
 
 
 @pytest.fixture
 def task_archive_dir(project_root):
     """Get the task archive directory."""
-    return project_root / "tasks" / "task-archive"
+    return project_root / "tasks" / "ad-hoc" / "completed"
 
 
 @pytest.fixture
 def task_failed_dir(project_root):
     """Get the task failed directory."""
-    return project_root / "tasks" / "task-failed"
+    return project_root / "tasks" / "ad-hoc" / "failed"
 
 
 @pytest.fixture
 def sample_task_source_dir(temp_dir):
     """Create a sample TaskSourceDirectory."""
-    source_path = temp_dir / "tasks" / "task-documents"
+    source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
     source_path.mkdir(parents=True)
 
     return TaskSourceDirectory(
@@ -68,7 +68,7 @@ def sample_task_source_dir(temp_dir):
 @pytest.fixture
 def sample_config(temp_dir):
     """Create a sample QueueConfig."""
-    source_path = temp_dir / "tasks" / "task-documents"
+    source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
     source_path.mkdir(parents=True)
 
     return QueueConfig(

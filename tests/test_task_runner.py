@@ -19,8 +19,9 @@ class TestTaskRunnerInit:
         """Test that init creates necessary directories."""
         runner = TaskRunner(str(temp_dir))
 
-        assert (temp_dir / "tasks" / "task-archive").exists()
-        assert (temp_dir / "tasks" / "task-failed").exists()
+        # TaskRunner no longer creates directories in __init__
+        # Directories are now per-queue (ad-hoc/completed, planned/completed, etc.)
+        assert runner.project_workspace == temp_dir.resolve()
 
 
 class TestPickNextTask:
@@ -31,7 +32,7 @@ class TestPickNextTask:
         runner = TaskRunner(str(project_root))
         source_dir = TaskSourceDirectory(
             id="test",
-            path=str(project_root / "tasks" / "task-documents")
+            path=str(project_root / "tasks" / "ad-hoc" / "pending")
         )
 
         task = runner.pick_next_task_from_source(source_dir)
@@ -42,7 +43,7 @@ class TestPickNextTask:
         runner = TaskRunner(str(project_root))
         source_dir = TaskSourceDirectory(
             id="test",
-            path=str(project_root / "tasks" / "task-documents")
+            path=str(project_root / "tasks" / "ad-hoc" / "pending")
         )
 
         # Tasks should be picked in chronological order
@@ -87,14 +88,15 @@ class TestExecuteTask:
     """Tests for execute_task method."""
 
     def test_execute_task_moves_to_archive_on_success(self, project_root):
-        """Test that successful tasks are moved to archive."""
+        """Test that successful tasks are moved to completed."""
         runner = TaskRunner(str(project_root))
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = project_root / "tasks" / "task-documents" / f"task-{timestamp}-test.md"
+        task_file = project_root / "tasks" / "ad-hoc" / "pending" / f"task-{timestamp}-test.md"
         task_file.write_text("# Test task")
 
-        archive_dir = project_root / "tasks" / "task-archive"
+        # Per-queue completed directory
+        completed_dir = project_root / "tasks" / "ad-hoc" / "completed"
 
         # Mock the executor to return success
         with patch.object(runner.executor, 'execute') as mock_execute:
@@ -105,11 +107,11 @@ class TestExecuteTask:
                 output="Done"
             )
 
-            result = runner.execute_task(task_file)
+            result = runner.execute_task(task_file, worker="ad-hoc")
 
-            # Task should be in archive
-            archived_task = archive_dir / task_file.name
-            assert archived_task.exists()
+            # Task should be in completed
+            completed_task = completed_dir / task_file.name
+            assert completed_task.exists()
             # Original should be gone
             assert not task_file.exists()
             assert result['status'] == 'success'
@@ -119,10 +121,11 @@ class TestExecuteTask:
         runner = TaskRunner(str(project_root))
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = project_root / "tasks" / "task-documents" / f"task-{timestamp}-test.md"
+        task_file = project_root / "tasks" / "ad-hoc" / "pending" / f"task-{timestamp}-test.md"
         task_file.write_text("# Test task")
 
-        failed_dir = project_root / "tasks" / "task-failed"
+        # Per-queue failed directory
+        failed_dir = project_root / "tasks" / "ad-hoc" / "failed"
 
         # Mock the executor to return failure
         with patch.object(runner.executor, 'execute') as mock_execute:
@@ -133,7 +136,7 @@ class TestExecuteTask:
                 error="Test error"
             )
 
-            result = runner.execute_task(task_file)
+            result = runner.execute_task(task_file, worker="ad-hoc")
 
             # Task should be in failed
             failed_task = failed_dir / task_file.name
@@ -149,7 +152,7 @@ class TestGetStatus:
         runner = TaskRunner(str(project_root))
         source_dir = TaskSourceDirectory(
             id="test",
-            path=str(project_root / "tasks" / "task-documents")
+            path=str(project_root / "tasks" / "ad-hoc" / "pending")
         )
 
         status = runner.get_status([source_dir])
@@ -163,7 +166,7 @@ class TestGetStatus:
         runner = TaskRunner(str(project_root))
         source_dir = TaskSourceDirectory(
             id="test",
-            path=str(project_root / "tasks" / "task-documents")
+            path=str(project_root / "tasks" / "ad-hoc" / "pending")
         )
 
         status = runner.get_status([source_dir])

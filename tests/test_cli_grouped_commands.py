@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test suite for task-queue CLI with grouped commands.
+Test suite for results CLI with grouped commands.
 
 Tests all new command groups:
 - sources: list, add, rm
@@ -102,7 +102,7 @@ class TaskQueueCLITester:
 
         # Check directories exist
         for queue in ["ad-hoc", "planned"]:
-            for subdir in ["task-staging", "task-documents", "task-archive", "task-failed", "task-queue", "task-reports"]:
+            for subdir in ["staging", "pending", "completed", "failed", "results", "reports", "planning"]:
                 dir_path = Path(self.temp_dir) / "tasks" / queue / subdir
                 if dir_path.exists():
                     self.record_test(True, f"Directory exists: tasks/{queue}/{subdir}")
@@ -162,7 +162,7 @@ class TaskQueueCLITester:
         print("\n🧪 Test 6: Sources Add Custom Queue")
 
         # Create custom queue directory
-        custom_dir = Path(self.temp_dir) / "tasks" / "custom" / "task-documents"
+        custom_dir = Path(self.temp_dir) / "tasks" / "custom" / "pending"
         custom_dir.mkdir(parents=True, exist_ok=True)
 
         result = self.run_command([
@@ -213,7 +213,7 @@ class TaskQueueCLITester:
         self.run_command(["init"])
 
         # Create a test task (note: task_id must match the filename without .md)
-        task_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "task-documents" / "task-20260207-123456.md"
+        task_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "pending" / "task-20260207-123456.md"
         task_file.parent.mkdir(parents=True, exist_ok=True)
         task_file.write_text("# Test Task\n\nThis is a test task.")
 
@@ -231,7 +231,7 @@ class TaskQueueCLITester:
         self.run_command(["init"])
 
         # Create a test task (no lock file)
-        task_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "task-documents" / "task-20260207-999999.md"
+        task_file = Path(self.temp_dir) / "tasks" / "ad-hoc" / "pending" / "task-20260207-999999.md"
         task_file.parent.mkdir(parents=True, exist_ok=True)
         task_file.write_text("# Test Task")
 
@@ -245,7 +245,7 @@ class TaskQueueCLITester:
         print("\n🧪 Test 12: Sources Remove Queue")
 
         # First add a custom queue
-        custom_dir = Path(self.temp_dir) / "tasks" / "temp" / "task-documents"
+        custom_dir = Path(self.temp_dir) / "tasks" / "temp" / "pending"
         custom_dir.mkdir(parents=True, exist_ok=True)
 
         self.run_command([
@@ -347,8 +347,8 @@ class TaskQueueCLITester:
 
     def _create_test_tasks(self):
         """Create some test tasks for testing."""
-        ad_hoc_dir = Path(self.temp_dir) / "tasks" / "ad-hoc" / "task-documents"
-        planned_dir = Path(self.temp_dir) / "tasks" / "planned" / "task-documents"
+        ad_hoc_dir = Path(self.temp_dir) / "tasks" / "ad-hoc" / "pending"
+        planned_dir = Path(self.temp_dir) / "tasks" / "planned" / "pending"
 
         ad_hoc_dir.mkdir(parents=True, exist_ok=True)
         planned_dir.mkdir(parents=True, exist_ok=True)

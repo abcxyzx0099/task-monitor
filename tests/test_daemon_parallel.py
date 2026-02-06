@@ -68,8 +68,12 @@ class TestWorkerLoop:
     def test_worker_loop_processes_single_source(self, temp_dir):
         """Test that worker loop processes tasks from one source."""
         # Create source directory with tasks
-        source_dir = temp_dir / "tasks" / "task-documents"
+        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
         source_dir.mkdir(parents=True)
+
+        # Create completed directory for moving processed tasks
+        completed_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
+        completed_dir.mkdir(parents=True)
 
         # Create test tasks
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -91,10 +95,10 @@ class TestWorkerLoop:
         # Create event for this source
         daemon._source_events["test"] = threading.Event()
 
-        # Mock execute to return success and move to archive
-        def mock_execute(task_file, project_workspace=None):
-            # Move to archive
-            archive_dir = Path(project_workspace) / "tasks" / "task-archive"
+        # Mock execute to return success and move to completed
+        def mock_execute(task_file, project_workspace=None, worker=None):
+            # Move to completed
+            archive_dir = Path(project_workspace) / "tasks" / "ad-hoc" / "completed"
             shutil.move(str(task_file), str(archive_dir / task_file.name))
             from task_queue.executor import ExecutionResult
             return ExecutionResult(success=True, task_id=task_file.stem)
@@ -115,7 +119,7 @@ class TestWorkerLoop:
         stopper.join()
 
         # Tasks should have been processed
-        archive_dir = temp_dir / "tasks" / "task-archive"
+        archive_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
         assert len(list(archive_dir.glob("task-*.md"))) >= 1
 
 
@@ -129,6 +133,10 @@ class TestParallelExecutionSimulation:
         source2_dir = temp_dir / "source2"
         source1_dir.mkdir(parents=True)
         source2_dir.mkdir(parents=True)
+
+        # Create completed directory for moving processed tasks
+        completed_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
+        completed_dir.mkdir(parents=True)
 
         # Create tasks in both sources
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -154,7 +162,7 @@ class TestParallelExecutionSimulation:
                     with lock:
                         processed["worker1"].append(task.name)
                     time.sleep(0.05)  # Simulate work
-                    shutil.move(str(task), str(temp_dir / "tasks" / "task-archive" / task.name))
+                    shutil.move(str(task), str(temp_dir / "tasks" / "ad-hoc" / "completed" / task.name))
 
         def worker2():
             """Simulate worker 2 processing source2."""
@@ -164,7 +172,7 @@ class TestParallelExecutionSimulation:
                     with lock:
                         processed["worker2"].append(task.name)
                     time.sleep(0.05)  # Simulate work
-                    shutil.move(str(task), str(temp_dir / "tasks" / "task-archive" / task.name))
+                    shutil.move(str(task), str(temp_dir / "tasks" / "ad-hoc" / "completed" / task.name))
 
         # Run workers in parallel
         t1 = threading.Thread(target=worker1)
