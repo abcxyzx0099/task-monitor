@@ -37,6 +37,142 @@ def _restart_daemon() -> bool:
         return False
 
 
+def cmd_init(args):
+    """Initialize task system from current directory.
+
+    Creates directory structure and registers both ad-hoc and planned queues.
+    Uses current directory as project workspace.
+    """
+    import os
+    from datetime import datetime
+
+    # Get current directory as project workspace
+    project_workspace = Path.cwd()
+    print("=" * 60)
+    print("🚀 Task System Initialization")
+    print("=" * 60)
+    print(f"\n📁 Project Workspace: {project_workspace}")
+
+    # Define queue configurations
+    queues = [
+        {
+            "id": "ad-hoc",
+            "path": project_workspace / "tasks" / "ad-hoc" / "task-documents",
+            "description": "Quick, spontaneous tasks from conversation",
+            "subdirs": ["task-staging", "task-documents", "task-archive", "task-failed", "task-queue", "task-reports"]
+        },
+        {
+            "id": "planned",
+            "path": project_workspace / "tasks" / "planned" / "task-documents",
+            "description": "Organized, sequential tasks from planning docs",
+            "subdirs": ["task-staging", "task-documents", "task-archive", "task-failed", "task-queue", "task-reports"]
+        }
+    ]
+
+    config_manager = ConfigManager(args.config)
+
+    # Check if already initialized (only warn if not using force or skip-existing)
+    existing_sources = [s.id for s in config_manager.config.task_source_directories]
+    already_initialized = "ad-hoc" in existing_sources or "planned" in existing_sources
+
+    if already_initialized and not args.force and not args.skip_existing:
+        print("\n⚠️  Task system appears to be already initialized.")
+        print("   Found sources:", ", ".join(existing_sources))
+        print("\nUse --force to re-initialize or --skip-existing to add missing queues only.")
+        return 0
+
+    # Create directory structure and register queues
+    print("\n📂 Creating directory structure...")
+
+    for queue in queues:
+        queue_base = queue["path"].parent
+
+        # Create subdirectories
+        for subdir in queue["subdirs"]:
+            subdir_path = queue_base / subdir
+            try:
+                subdir_path.mkdir(parents=True, exist_ok=True)
+                print(f"   ✅ Created: {subdir_path.relative_to(project_workspace)}")
+            except Exception as e:
+                print(f"   ❌ Failed to create {subdir_path}: {e}")
+                return 1
+
+    print("\n📋 Registering Task Source Directories...")
+
+    # Set project workspace
+    if not config_manager.config.project_workspace:
+        config_manager.set_project_workspace(str(project_workspace))
+        print(f"   ✅ Set Project Workspace: {project_workspace}")
+
+    # Register queues
+    for queue in queues:
+        source_id = queue["id"]
+        task_source_dir = str(queue["path"])
+
+        # Skip if already exists and --skip-existing is set
+        if args.skip_existing and config_manager.config.get_task_source_directory(source_id):
+            print(f"   ⏭️  Skipped existing: {source_id}")
+            continue
+
+        try:
+            # Remove existing if force mode
+            if args.force and config_manager.config.get_task_source_directory(source_id):
+                config_manager.config.remove_task_source_directory(source_id)
+                print(f"   🔄 Removed existing: {source_id}")
+
+            # Add source directory
+            config_manager.add_task_source_directory(
+                path=task_source_dir,
+                id=source_id,
+                description=queue["description"]
+            )
+            print(f"   ✅ Registered: {source_id}")
+            print(f"      Path: {task_source_dir}")
+        except Exception as e:
+            print(f"   ❌ Failed to register {source_id}: {e}")
+            return 1
+
+    # Save configuration
+    try:
+        config_manager.save_config()
+        print("\n💾 Configuration saved")
+    except Exception as e:
+        print(f"\n❌ Failed to save configuration: {e}")
+        return 1
+
+    # Verification
+    print("\n🔍 Verifying setup...")
+
+    # Reload config to verify
+    config_manager = ConfigManager(args.config)
+    registered = config_manager.config.task_source_directories
+    registered_ids = [s.id for s in registered]
+
+    print(f"\n✅ Initialization complete!")
+    print(f"\n📊 Summary:")
+    print(f"   Project Workspace: {project_workspace}")
+    print(f"   Registered Queues: {len(registered)}")
+
+    for source in registered:
+        print(f"\n   📁 {source.id}")
+        print(f"      Path: {source.path}")
+        if source.description:
+            print(f"      Description: {source.description}")
+
+    # Show next steps
+    print(f"\n📚 Next Steps:")
+    print(f"   1. Create tasks using the task-documents skill")
+    print(f"   2. Start daemon: systemctl --user start task-queue.service")
+    print(f"   3. Check status: python -m task_queue.cli status")
+    print(f"   4. View logs: journalctl --user -u task-queue.service -f")
+
+    # Offer to restart daemon
+    if args.restart_daemon:
+        _restart_daemon()
+
+    return 0
+
+
 def cmd_status(args):
     """Show system status."""
     try:
@@ -79,7 +215,6 @@ def cmd_status(args):
 
     print(f"\n📋 Overall Statistics:")
     print(f"   Pending:   {status['pending']}")
-    print(f"   Running:   {status['running']}")
     print(f"   Completed: {status['completed']}")
     print(f"   Failed:    {status['failed']}")
 
@@ -91,7 +226,7 @@ def cmd_status(args):
         if source_dir:
             print(f"      Path: {source_dir.path}")
             print(f"      Description: {source_dir.description}")
-        print(f"      Pending: {source_stats['pending']}, Running: {source_stats['running']}, "
+        print(f"      Pending: {source_stats['pending']}, "
               f"Completed: {source_stats['completed']}, Failed: {source_stats['failed']}")
 
     return 0
@@ -236,7 +371,7 @@ def cmd_run(args):
 
             # Check if any tasks exist
             status = task_runner.get_status(source_dirs)
-            if status['pending'] == 0 and status['running'] == 0:
+            if status['pending'] == 0:
                 print("\n✅ All tasks processed")
                 break
 
@@ -258,14 +393,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Register a Task Source Directory
+  # Initialize task system from current directory
+  task-queue init
+
+  # Check status
+  task-queue status
+
+  # Register a Task Source Directory (advanced)
   task-queue register \\
     --task-source-dir tasks/task-documents \\
     --project-workspace /path/to/project \\
     --source-id main
-
-  # Check status
-  task-queue status
 
   # Run interactively
   task-queue run --cycles 5
@@ -287,6 +425,47 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Init command
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Initialize task system from current directory",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Initialize from current directory
+  task-queue init
+
+  # Re-initialize (replace existing configuration)
+  task-queue init --force
+
+  # Initialize but skip existing queues
+  task-queue init --skip-existing
+
+  # Initialize and restart daemon
+  task-queue init --restart-daemon
+
+This command creates the directory structure for ad-hoc and planned task queues,
+then registers them as Task Source Directories. The current directory is used as
+the Project Workspace.
+        """
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-initialize even if already set up (replaces existing queues)"
+    )
+    init_parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip queues that are already registered"
+    )
+    init_parser.add_argument(
+        "--restart-daemon",
+        action="store_true",
+        help="Restart the task-queue daemon after initialization"
+    )
+    init_parser.set_defaults(func=cmd_init)
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
