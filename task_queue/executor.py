@@ -253,7 +253,7 @@ class SyncTaskExecutor:
         full_output = []
 
         try:
-            # FIXED: Removed extras that break /task-worker skill invocation
+            # FIXED: Removed extras that break /task-execution skill invocation
             # - No cli_path forcing (let SDK find bundled CLI naturally)
             # - No stderr callback (interferes with execution)
             # - No extra_args/debug mode (causes issues)
@@ -269,10 +269,10 @@ class SyncTaskExecutor:
                 },
             )
 
-            # Invoke task-worker by asking agent to READ skill documentation and follow it
+            # Invoke task-execution by asking agent to READ skill documentation and follow it
             # This approach was tested and proven to spawn Implementation/Auditor agents
             # See: temp/test_read_skill_doc.py for test results
-            prompt_text = f"""Read the task-worker skill documentation at: .claude/skills/task-worker/SKILL.md
+            prompt_text = f"""Read the task-execution skill documentation at: .claude/skills/task-execution/SKILL.md
 
 Follow the skill's workflow EXACTLY to execute the task at: {relative_task_path}
 

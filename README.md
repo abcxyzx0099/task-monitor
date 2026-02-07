@@ -60,7 +60,7 @@ Execution Model:
 | **Lock File Tracking** | `.task-XXX.lock` files track running tasks with metadata |
 | **JSON Result Files** | Captures execution metadata, cost, token usage per task |
 | **Auto-Load on Create** | Watchdog auto-detects new Task Documents |
-| **Claude Agent SDK Integration** | Executes tasks via `/task-worker` skill |
+| **Claude Agent SDK Integration** | Executes tasks via `/task-execution` skill |
 | **Daemon Service** | Runs as systemd user service for continuous processing |
 
 ### Execution Model
@@ -404,7 +404,7 @@ journalctl --user -u task-queue --since today
 
 ### Two-Agent Workflow
 
-Each task is executed using a two-agent workflow via the `/task-worker` skill:
+Each task is executed using a two-agent workflow via the `/task-execution` skill:
 
 1. **Implementation Agent** - Executes the task specification
 2. **Auditor Agent** - Reviews and verifies the implementation
