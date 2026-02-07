@@ -37,8 +37,8 @@ dev = [
 ]
 
 [project.scripts]
-task-queue = "task_queue.cli:main"
-task-queue-daemon = "task_queue.daemon:main"
+task-monitor = "task_queue.cli:main"
+task-monitor-daemon = "task_queue.daemon:main"
 
 [project.urls]
 Homepage = "https://github.com/datachat/task-queue"
