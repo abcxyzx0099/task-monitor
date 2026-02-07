@@ -29,7 +29,7 @@ class TestParallelWorkerSetup:
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
+            "queues": [
                 {
                     "id": "source1",
                     "path": str(source1_dir),
@@ -67,9 +67,10 @@ class TestWorkerLoop:
 
     def test_worker_loop_processes_single_source(self, temp_dir):
         """Test that worker loop processes tasks from one source."""
-        # Create source directory with tasks
-        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_dir.mkdir(parents=True)
+        # Create queue directory with tasks
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         # Create completed directory for moving processed tasks
         completed_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
@@ -78,7 +79,7 @@ class TestWorkerLoop:
         # Create test tasks
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         for i in range(2):
-            task = source_dir / f"task-{timestamp}-{i:02d}.md"
+            task = pending_dir / f"task-{timestamp}-{i:02d}.md"
             task.write_text(f"# Task {i}")
 
         daemon = TaskQueueDaemon()
@@ -89,10 +90,10 @@ class TestWorkerLoop:
         from task_queue.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
-        # Create source
-        source = TaskSourceDirectory(id="test", path=str(source_dir))
+        # Create queue
+        queue = Queue(id="test", path=str(queue_path))
 
-        # Create event for this source
+        # Create event for this queue
         daemon._source_events["test"] = threading.Event()
 
         # Mock execute to return success and move to completed
@@ -114,7 +115,7 @@ class TestWorkerLoop:
         stopper = threading.Thread(target=stop_after_one)
         stopper.start()
 
-        daemon._worker_loop(source)
+        daemon._worker_loop(queue)
 
         stopper.join()
 
@@ -128,36 +129,36 @@ class TestParallelExecutionSimulation:
 
     def test_parallel_workers_dont_conflict(self, temp_dir):
         """Test that parallel workers don't conflict with each other."""
-        # Create two source directories
-        source1_dir = temp_dir / "source1"
-        source2_dir = temp_dir / "source2"
-        source1_dir.mkdir(parents=True)
-        source2_dir.mkdir(parents=True)
+        # Create two queue directories
+        queue1_path = temp_dir / "source1"
+        queue2_path = temp_dir / "source2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
         # Create completed directory for moving processed tasks
         completed_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
         completed_dir.mkdir(parents=True)
 
-        # Create tasks in both sources
+        # Create tasks in both queues
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         for i in range(3):
-            (source1_dir / f"task-{timestamp}-{i:02d}-s1.md").write_text(f"# S1 Task {i}")
-            (source2_dir / f"task-{timestamp}-{i:02d}-s2.md").write_text(f"# S2 Task {i}")
+            (queue1_path / "pending" / f"task-{timestamp}-{i:02d}-s1.md").write_text(f"# S1 Task {i}")
+            (queue2_path / "pending" / f"task-{timestamp}-{i:02d}-s2.md").write_text(f"# S2 Task {i}")
 
         from task_queue.task_runner import TaskRunner
         runner = TaskRunner(str(temp_dir))
 
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_dir))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_dir))
+        queue1 = Queue(id="source1", path=str(queue1_path))
+        queue2 = Queue(id="source2", path=str(queue2_path))
 
         # Track which worker processed which tasks
         processed = {"worker1": [], "worker2": []}
         lock = threading.Lock()
 
         def worker1():
-            """Simulate worker 1 processing source1."""
+            """Simulate worker 1 processing queue1."""
             for i in range(3):
-                task = runner.pick_next_task_from_source(source1)
+                task = runner.pick_next_task_from_queue(queue1)
                 if task:
                     with lock:
                         processed["worker1"].append(task.name)
@@ -165,9 +166,9 @@ class TestParallelExecutionSimulation:
                     shutil.move(str(task), str(temp_dir / "tasks" / "ad-hoc" / "completed" / task.name))
 
         def worker2():
-            """Simulate worker 2 processing source2."""
+            """Simulate worker 2 processing queue2."""
             for i in range(3):
-                task = runner.pick_next_task_from_source(source2)
+                task = runner.pick_next_task_from_queue(queue2)
                 if task:
                     with lock:
                         processed["worker2"].append(task.name)

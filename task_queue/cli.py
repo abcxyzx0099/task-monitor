@@ -198,7 +198,7 @@ def cmd_status(args):
 
 def _print_overview_status(config, status):
     """Print overview status (summary counts)."""
-    print(f"\nTask Source Directories: {len(status['sources'])}")
+    print(f"\nTask Source Directories: {len(status['queues'])}")
 
     print(f"\n📋 Overall Statistics:")
     print(f"   Pending:   {status['pending']}")
@@ -206,17 +206,17 @@ def _print_overview_status(config, status):
     print(f"   Failed:    {status['failed']}")
 
     print(f"\n📁 Per-Source Summary:")
-    for source_id, source_stats in status['sources'].items():
-        queue = config.get_queue(source_id)
+    for queue_id, queue_stats in status['queues'].items():
+        queue = config.get_queue(queue_id)
         running = get_locked_task(Path(queue.path))
         status_indicator = "🔄 Running" if running else "✅ Idle"
-        print(f"\n  📁 {source_id} ({status_indicator})")
+        print(f"\n  📁 {queue_id} ({status_indicator})")
         if queue:
             print(f"      Path: {queue.path}")
         if running:
             print(f"      Running: {running}")
-        print(f"      Pending: {source_stats['pending']}, "
-              f"Completed: {source_stats['completed']}, Failed: {source_stats['failed']}")
+        print(f"      Pending: {queue_stats['pending']}, "
+              f"Completed: {queue_stats['completed']}, Failed: {queue_stats['failed']}")
 
 
 def _print_detailed_status(config, task_runner, queues):
@@ -708,11 +708,18 @@ def cmd_run(args):
             if task_file:
                 print(f"Found task: {task_file.name}")
 
-                # Determine worker from task path
-                rel_path = task_file.relative_to(config.project_workspace)
-                worker = "ad-hoc" if "ad-hoc" in str(rel_path) else "planned"
+                # Determine which queue this task belongs to
+                queue = None
+                for q in queues:
+                    if str(q.id) in str(task_file):
+                        queue = q
+                        break
 
-                result = task_runner.execute_task(task_file, worker=worker)
+                if not queue:
+                    print(f"Error: Could not determine queue for task {task_file.name}")
+                    break
+
+                result = task_runner.execute_task(task_file, queue)
                 print(f"Status: {result['status']}")
                 if result.get("error"):
                     print(f"Error: {result['error']}")

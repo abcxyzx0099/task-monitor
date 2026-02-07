@@ -2,10 +2,10 @@
 Integration tests for task-queue CLI commands.
 
 Tests the CLI functionality including:
-- register command
-- unregister command
+- queues add command
+- queues rm command
 - status command
-- list-sources command
+- queues list command
 - Auto-restart functionality
 - Daemon stays running
 """
@@ -37,7 +37,7 @@ class TestCLICommands:
                     "enable_file_hash": True
                 },
                 "project_workspace": None,
-                "task_source_directories": []
+                "queues": []
             }
             json.dump(config, f, indent=2)
             f.flush()
@@ -79,14 +79,14 @@ class TestCLICommands:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
             config_file = config_dir / "test-config.json"
-            task_source_dir = temp_workspace / "tasks" / "ad-hoc" / "pending"
+            queue_path = temp_workspace / "tasks" / "ad-hoc"
 
             # Run sources add command
             result = subprocess.run(
                 [
                     "python3", "-m", "task_queue.cli",
                     "--config", str(config_file),
-                    "sources", "add", str(task_source_dir),
+                    "queues", "add", str(queue_path),
                     "--id", "test-source",
                     "--project-workspace", str(temp_workspace)
                 ],
@@ -103,82 +103,82 @@ class TestCLICommands:
                 config = json.load(f)
 
             assert config["project_workspace"] == str(temp_workspace)
-            assert len(config["task_source_directories"]) == 1
-            assert config["task_source_directories"][0]["id"] == "test-source"
+            assert len(config["queues"]) == 1
+            assert config["queues"][0]["id"] == "test-source"
 
     def test_register_adds_source(self, temp_config, temp_workspace, mock_systemctl):
         """Test that register adds a source directory to config."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_sources_add
+        from task_queue.cli import cmd_queues_add
         from argparse import Namespace
 
-        # Create args - sources add uses 'id' not 'source_id'
+        # Create args - queues add uses 'id' not 'queue_id'
         args = Namespace(
             config=temp_config,
-            task_source_dir=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
+            queue_path=str(temp_workspace / "tasks" / "ad-hoc"),
             project_workspace=str(temp_workspace),
             id="test-source",
             description=None  # Optional description
         )
 
         # Run register command
-        result = cmd_sources_add(args)
+        result = cmd_queues_add(args)
 
         assert result == 0
 
         # Verify source was added - reload config from file
         config_manager = ConfigManager(Path(temp_config))
         config = config_manager.config
-        assert len(config.task_source_directories) == 1
-        assert config.task_source_directories[0].id == "test-source"
-        assert config.task_source_directories[0].path == str(temp_workspace / "tasks" / "ad-hoc" / "pending")
+        assert len(config.queues) == 1
+        assert config.queues[0].id == "test-source"
+        assert config.queues[0].path == str(temp_workspace / "tasks" / "ad-hoc")
 
     def test_unregister_removes_source(self, temp_config, temp_workspace, mock_systemctl):
         """Test that sources rm removes a source directory from config."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_sources_add, cmd_sources_rm
+        from task_queue.cli import cmd_queues_add, cmd_queues_rm
         from argparse import Namespace
 
-        # First register a source - sources add uses 'id' not 'source_id'
+        # First register a queue - queues add uses 'id' not 'queue_id'
         args_reg = Namespace(
             config=temp_config,
-            task_source_dir=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
+            queue_path=str(temp_workspace / "tasks" / "ad-hoc"),
             project_workspace=str(temp_workspace),
             id="test-source",
             description=None  # Optional description
         )
-        result = cmd_sources_add(args_reg)
+        result = cmd_queues_add(args_reg)
         assert result == 0
 
         # Verify source was added - reload from file
         config_manager = ConfigManager(Path(temp_config))
-        assert len(config_manager.config.task_source_directories) == 1
+        assert len(config_manager.config.queues) == 1
 
         # Now unregister it
         args_unreg = Namespace(
             config=temp_config,
-            source_id="test-source"
+            queue_id="test-source"
         )
-        result = cmd_sources_rm(args_unreg)
+        result = cmd_queues_rm(args_unreg)
 
         assert result == 0
 
         # Verify source was removed - reload from file
         config_manager = ConfigManager(Path(temp_config))
-        assert len(config_manager.config.task_source_directories) == 0
+        assert len(config_manager.config.queues) == 0
 
     def test_unregister_nonexistent_source(self, temp_config):
-        """Test that sources rm handles non-existent sources gracefully."""
+        """Test that queues rm handles non-existent queues gracefully."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_sources_rm
+        from task_queue.cli import cmd_queues_rm
         from argparse import Namespace
 
         args = Namespace(
             config=temp_config,
-            source_id="nonexistent"
+            queue_id="nonexistent"
         )
 
-        result = cmd_sources_rm(args)
+        result = cmd_queues_rm(args)
 
         # Should return error code
         assert result == 1
@@ -231,8 +231,8 @@ class TestCLICommands:
 
         config_manager = ConfigManager(Path(temp_config))
         config_manager.set_project_workspace(str(temp_workspace))
-        config_manager.add_task_source_directory(
-            path=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
+        config_manager.add_queue(
+            path=str(temp_workspace / "tasks" / "ad-hoc"),
             id="test-source"
         )
 
@@ -255,15 +255,15 @@ class TestCLICommands:
     def test_list_sources_command(self, temp_config, temp_workspace):
         """Test sources list command."""
         from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_sources_list
+        from task_queue.cli import cmd_queues_list
         from argparse import Namespace
         from io import StringIO
         import sys
 
         config_manager = ConfigManager(Path(temp_config))
         config_manager.set_project_workspace(str(temp_workspace))
-        config_manager.add_task_source_directory(
-            path=str(temp_workspace / "tasks" / "ad-hoc" / "pending"),
+        config_manager.add_queue(
+            path=str(temp_workspace / "tasks" / "ad-hoc"),
             id="test-source"
         )
 
@@ -274,7 +274,7 @@ class TestCLICommands:
         sys.stdout = StringIO()
 
         try:
-            result = cmd_sources_list(args)
+            result = cmd_queues_list(args)
             output = sys.stdout.getvalue()
         finally:
             sys.stdout = old_stdout
@@ -350,12 +350,12 @@ class TestCLIIntegration:
                     return original_run(cmd, *args, **kwargs)
 
                 with patch('subprocess.run', side_effect=mock_run):
-                    # 1. Register (sources add)
+                    # 1. Register (queues add)
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "sources", "add", str(task_source_dir),
+                            "queues", "add", str(workspace / "tasks" / "ad-hoc"),
                             "--id", "test",
                             "--project-workspace", str(workspace)
                         ],
@@ -366,12 +366,12 @@ class TestCLIIntegration:
 
                     assert "Added" in result.stdout
 
-                    # 2. List sources
+                    # 2. List queues
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "sources", "list"
+                            "queues", "list"
                         ],
                         capture_output=True,
                         text=True,
@@ -380,13 +380,13 @@ class TestCLIIntegration:
 
                     assert "test" in result.stdout
 
-                    # 3. Remove (sources rm)
+                    # 3. Remove (queues rm)
                     result = subprocess.run(
                         [
                             "python3", "-m", "task_queue.cli",
                             "--config", str(config_file),
-                            "sources", "rm",
-                            "--source-id", "test"
+                            "queues", "rm",
+                            "--queue-id", "test"
                         ],
                         capture_output=True,
                         text=True,

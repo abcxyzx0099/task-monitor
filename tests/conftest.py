@@ -24,11 +24,11 @@ def temp_dir():
 def project_root(temp_dir):
     """Create a mock project root with task directories."""
     queue_path = temp_dir / "tasks" / "ad-hoc"
-    queue_path.mkdir(parents=True)
-    (queue_path / "pending").mkdir(parents=True)
-    (queue_path / "completed").mkdir(parents=True)
-    (queue_path / "failed").mkdir(parents=True)
-    (queue_path / "results").mkdir(parents=True)
+    queue_path.mkdir(parents=True, exist_ok=True)
+    (queue_path / "pending").mkdir(exist_ok=True)
+    (queue_path / "completed").mkdir(exist_ok=True)
+    (queue_path / "failed").mkdir(exist_ok=True)
+    (queue_path / "results").mkdir(exist_ok=True)
 
     return temp_dir
 
@@ -122,7 +122,7 @@ Test task description
 def multiple_task_files(temp_dir):
     """Create multiple task specification files."""
     queue_path = temp_dir / "tasks" / "ad-hoc"
-    queue_path.mkdir(parents=True)
+    queue_path.mkdir(parents=True, exist_ok=True)
     pending_dir = queue_path / "pending"
     pending_dir.mkdir(exist_ok=True)
 

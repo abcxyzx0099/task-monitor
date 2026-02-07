@@ -176,7 +176,7 @@ class TaskDocumentWatcher(FileSystemEventHandler):
 
         # Trigger load callback
         try:
-            self.load_callback(file_path, self.source_dir.id)
+            self.load_callback(file_path, self.queue.id)
         except Exception as e:
             logger.error(
                 f"Error in load callback for {filepath.name}: {e}",
@@ -319,8 +319,8 @@ class WatchdogManager:
 
     def stop_all(self) -> None:
         """Stop all registered watchers."""
-        for source_id in list(self._watchers.keys()):
-            self.remove_source(source_id)
+        for queue_id in list(self._watchers.keys()):
+            self.remove_queue(queue_id)
 
     def is_watching(self, queue_id: str) -> bool:
         """

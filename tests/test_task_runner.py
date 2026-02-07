@@ -60,25 +60,25 @@ class TestPickNextTask:
 
     def test_pick_next_task_from_multiple_sources(self, project_root):
         """Test picking tasks from multiple sources."""
-        # Create two source directories
-        source1_dir = project_root / "tasks" / "source1"
-        source2_dir = project_root / "tasks" / "source2"
-        source1_dir.mkdir(parents=True)
-        source2_dir.mkdir(parents=True)
+        # Create two queue directories
+        queue1_path = project_root / "tasks" / "source1"
+        queue2_path = project_root / "tasks" / "source2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
-        # Create tasks in both sources
+        # Create tasks in both queues
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task1 = source1_dir / f"task-{timestamp}-001-source1.md"
-        task2 = source2_dir / f"task-{timestamp}-002-source2.md"
+        task1 = queue1_path / "pending" / f"task-{timestamp}-001-source1.md"
+        task2 = queue2_path / "pending" / f"task-{timestamp}-002-source2.md"
         task1.write_text("# Task 1")
         task2.write_text("# Task 2")
 
         runner = TaskRunner(str(project_root))
-        source1 = Queue(id="source1", path=str(source1_dir))
-        source2 = Queue(id="source2", path=str(source2_dir))
+        queue1 = Queue(id="source1", path=str(queue1_path))
+        queue2 = Queue(id="source2", path=str(queue2_path))
 
-        # Pick from all sources - should return the earliest by filename
-        task = runner.pick_next_task([source1, source2])
+        # Pick from all queues - should return the earliest by filename
+        task = runner.pick_next_task([queue1, queue2])
         assert task is not None
         # Should be task-001 since it's earlier in chronological order
         assert "001" in task.name
@@ -107,7 +107,8 @@ class TestExecuteTask:
                 output="Done"
             )
 
-            result = runner.execute_task(task_file, worker="ad-hoc")
+            queue = Queue(id="ad-hoc", path=str(project_root / "tasks" / "ad-hoc"))
+            result = runner.execute_task(task_file, queue)
 
             # Task should be in completed
             completed_task = completed_dir / task_file.name
@@ -136,7 +137,8 @@ class TestExecuteTask:
                 error="Test error"
             )
 
-            result = runner.execute_task(task_file, worker="ad-hoc")
+            queue = Queue(id="ad-hoc", path=str(project_root / "tasks" / "ad-hoc"))
+            result = runner.execute_task(task_file, queue)
 
             # Task should be in failed
             failed_task = failed_dir / task_file.name
@@ -172,33 +174,33 @@ class TestGetStatus:
         status = runner.get_status([queue])
 
         assert status['pending'] == 3
-        assert 'test' in status['sources']
+        assert 'test' in status['queues']
 
     def test_get_status_multiple_sources(self, project_root):
-        """Test status with multiple source directories."""
-        # Create two sources
-        source1_dir = project_root / "tasks" / "source1"
-        source2_dir = project_root / "tasks" / "source2"
-        source1_dir.mkdir(parents=True)
-        source2_dir.mkdir(parents=True)
+        """Test status with multiple queue directories."""
+        # Create two queues
+        queue1_path = project_root / "tasks" / "source1"
+        queue2_path = project_root / "tasks" / "source2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
-        # Create tasks in source1
+        # Create tasks in queue1
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         for i in range(2):
-            task = source1_dir / f"task-{timestamp}-{i:02d}-s1.md"
+            task = queue1_path / "pending" / f"task-{timestamp}-{i:02d}-s1.md"
             task.write_text("# Task")
 
-        # Create tasks in source2
+        # Create tasks in queue2
         for i in range(3):
-            task = source2_dir / f"task-{timestamp}-{i:02d}-s2.md"
+            task = queue2_path / "pending" / f"task-{timestamp}-{i:02d}-s2.md"
             task.write_text("# Task")
 
         runner = TaskRunner(str(project_root))
-        source1 = Queue(id="source1", path=str(source1_dir))
-        source2 = Queue(id="source2", path=str(source2_dir))
+        queue1 = Queue(id="source1", path=str(queue1_path))
+        queue2 = Queue(id="source2", path=str(queue2_path))
 
-        status = runner.get_status([source1, source2])
+        status = runner.get_status([queue1, queue2])
 
         assert status['pending'] == 5
-        assert status['sources']['source1']['pending'] == 2
-        assert status['sources']['source2']['pending'] == 3
+        assert status['queues']['source1']['pending'] == 2
+        assert status['queues']['source2']['pending'] == 3

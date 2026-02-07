@@ -150,7 +150,7 @@ class TaskQueueDaemon:
         # Add watcher for each source directory
         for queue in queues:
             try:
-                self.watchdog_manager.add_source(
+                self.watchdog_manager.add_queue(
                     queue=queue,
                     debounce_ms=watch_debounce_ms,
                     pattern=pattern
@@ -212,7 +212,7 @@ class TaskQueueDaemon:
 
         # Log watchdog status
         if self.watchdog_manager:
-            watched = self.watchdog_manager.get_watched_sources()
+            watched = self.watchdog_manager.get_watched_queues()
             logger.info(f"Monitoring {len(watched)} source(s)")
 
         # Start processing loop
@@ -239,7 +239,7 @@ class TaskQueueDaemon:
             # Create and start worker thread
             worker = threading.Thread(
                 target=self._worker_loop,
-                args=(source_dir,),
+                args=(queue,),
                 name=f"Worker-{queue.id}",
                 daemon=False  # Non-daemon threads keep the process running
             )

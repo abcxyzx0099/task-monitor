@@ -118,15 +118,16 @@ class TestTaskDocumentWatcher:
     """Tests for TaskDocumentWatcher class."""
 
     @pytest.fixture
-    def sample_source_dir(self, temp_dir):
-        """Create a sample task source directory."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+    def sample_queue(self, temp_dir):
+        """Create a sample queue."""
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
-        return TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source directory"
+        return Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
     @pytest.fixture
@@ -134,35 +135,35 @@ class TestTaskDocumentWatcher:
         """Create a mock load callback."""
         return MagicMock()
 
-    def test_init(self, sample_source_dir, mock_load_callback):
+    def test_init(self, sample_queue, mock_load_callback):
         """Test TaskDocumentWatcher initialization."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback,
             debounce_ms=500,
             pattern="task-*.md"
         )
 
-        assert watcher.source_dir == sample_source_dir
+        assert watcher.queue == sample_queue
         assert watcher.load_callback == mock_load_callback
         assert watcher.pattern == "task-*.md"
         assert watcher.debounce is not None
         assert watcher._observer is None
         assert len(watcher._processed_files) == 0
 
-    def test_init_default_pattern(self, sample_source_dir, mock_load_callback):
+    def test_init_default_pattern(self, sample_queue, mock_load_callback):
         """Test TaskDocumentWatcher with default pattern."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
         assert watcher.pattern == "task-*.md"
 
-    def test_on_created_directory_event(self, sample_source_dir, mock_load_callback):
+    def test_on_created_directory_event(self, sample_queue, mock_load_callback):
         """Test that directory events are ignored."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -175,10 +176,10 @@ class TestTaskDocumentWatcher:
 
         mock_load_callback.assert_not_called()
 
-    def test_on_created_non_matching_pattern(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_on_created_non_matching_pattern(self, sample_queue, mock_load_callback, temp_dir):
         """Test that non-matching files are ignored."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -190,10 +191,10 @@ class TestTaskDocumentWatcher:
 
         mock_load_callback.assert_not_called()
 
-    def test_on_created_invalid_task_id(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_on_created_invalid_task_id(self, sample_queue, mock_load_callback, temp_dir):
         """Test that invalid task IDs are ignored."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -205,14 +206,14 @@ class TestTaskDocumentWatcher:
 
         mock_load_callback.assert_not_called()
 
-    def test_on_created_valid_task_file(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_on_created_valid_task_file(self, sample_queue, mock_load_callback, temp_dir):
         """Test that valid task files trigger load callback."""
-        source_path = Path(sample_source_dir.path)
-        task_file = source_path / "task-20260206-120000-test.md"
+        queue_path = Path(sample_queue.path)
+        task_file = queue_path / "pending" / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback,
             debounce_ms=0  # Disable debounce for testing
         )
@@ -222,16 +223,16 @@ class TestTaskDocumentWatcher:
 
         watcher.on_created(event)
 
-        mock_load_callback.assert_called_once_with(str(task_file), "test-source")
+        mock_load_callback.assert_called_once_with(str(task_file), "test-queue")
 
-    def test_on_modified(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_on_modified(self, sample_queue, mock_load_callback, temp_dir):
         """Test file modified event handling."""
-        source_path = Path(sample_source_dir.path)
-        task_file = source_path / "task-20260206-120000-test.md"
+        queue_path = Path(sample_queue.path)
+        task_file = queue_path / "pending" / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback,
             debounce_ms=0
         )
@@ -241,12 +242,12 @@ class TestTaskDocumentWatcher:
 
         watcher.on_modified(event)
 
-        mock_load_callback.assert_called_once_with(str(task_file), "test-source")
+        mock_load_callback.assert_called_once_with(str(task_file), "test-queue")
 
-    def test_on_modified_ignored_directory(self, sample_source_dir, mock_load_callback):
+    def test_on_modified_ignored_directory(self, sample_queue, mock_load_callback):
         """Test that modified directory events are ignored."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -257,14 +258,14 @@ class TestTaskDocumentWatcher:
 
         mock_load_callback.assert_not_called()
 
-    def test_debouncing_in_on_created(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_debouncing_in_on_created(self, sample_queue, mock_load_callback, temp_dir):
         """Test that debouncing works for file creation."""
-        source_path = Path(sample_source_dir.path)
-        task_file = source_path / "task-20260206-120000-test.md"
+        queue_path = Path(sample_queue.path)
+        task_file = queue_path / "pending" / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback,
             debounce_ms=100
         )
@@ -280,17 +281,17 @@ class TestTaskDocumentWatcher:
         watcher.on_created(event)
         assert mock_load_callback.call_count == 1
 
-    def test_load_callback_exception_handling(self, sample_source_dir, temp_dir):
+    def test_load_callback_exception_handling(self, sample_queue, temp_dir):
         """Test that exceptions in load callback are handled gracefully."""
-        source_path = Path(sample_source_dir.path)
-        task_file = source_path / "task-20260206-120000-test.md"
+        queue_path = Path(sample_queue.path)
+        task_file = queue_path / "pending" / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
-        def failing_callback(file_path, source_id):
+        def failing_callback(file_path, queue_id):
             raise RuntimeError("Callback failed")
 
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=failing_callback,
             debounce_ms=0
         )
@@ -301,13 +302,13 @@ class TestTaskDocumentWatcher:
         # Should not raise exception
         watcher.on_created(event)
 
-    def test_start_nonexistent_directory(self, sample_source_dir, mock_load_callback):
+    def test_start_nonexistent_directory(self, sample_queue, mock_load_callback):
         """Test starting watcher with non-existent directory."""
-        # Modify source to point to non-existent path
-        sample_source_dir.path = "/nonexistent/path"
+        # Modify queue to point to non-existent path
+        sample_queue.path = "/nonexistent/path"
 
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -317,10 +318,10 @@ class TestTaskDocumentWatcher:
         # Observer should not be created
         assert watcher._observer is None
 
-    def test_start_already_running(self, sample_source_dir, mock_load_callback):
+    def test_start_already_running(self, sample_queue, mock_load_callback):
         """Test starting watcher when already running."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -335,10 +336,10 @@ class TestTaskDocumentWatcher:
         # Should not create new observer
         assert watcher._observer == mock_observer
 
-    def test_stop_when_not_running(self, sample_source_dir, mock_load_callback):
+    def test_stop_when_not_running(self, sample_queue, mock_load_callback):
         """Test stopping watcher when not running."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -347,10 +348,10 @@ class TestTaskDocumentWatcher:
 
         assert watcher._observer is None
 
-    def test_stop_running_watcher(self, sample_source_dir, mock_load_callback):
+    def test_stop_running_watcher(self, sample_queue, mock_load_callback):
         """Test stopping a running watcher."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -365,10 +366,10 @@ class TestTaskDocumentWatcher:
         mock_observer.join.assert_called_once_with(timeout=5.0)
         assert watcher._observer is None
 
-    def test_stop_handles_exception(self, sample_source_dir, mock_load_callback):
+    def test_stop_handles_exception(self, sample_queue, mock_load_callback):
         """Test that stop handles exceptions gracefully."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -382,19 +383,19 @@ class TestTaskDocumentWatcher:
 
         assert watcher._observer is None
 
-    def test_is_running_with_no_observer(self, sample_source_dir, mock_load_callback):
+    def test_is_running_with_no_observer(self, sample_queue, mock_load_callback):
         """Test is_running when no observer exists."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
         assert watcher.is_running() is False
 
-    def test_is_running_with_observer(self, sample_source_dir, mock_load_callback):
+    def test_is_running_with_observer(self, sample_queue, mock_load_callback):
         """Test is_running with active observer."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -404,10 +405,10 @@ class TestTaskDocumentWatcher:
 
         assert watcher.is_running() is True
 
-    def test_is_running_observer_not_alive(self, sample_source_dir, mock_load_callback):
+    def test_is_running_observer_not_alive(self, sample_queue, mock_load_callback):
         """Test is_running when observer is not alive."""
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback
         )
 
@@ -417,17 +418,17 @@ class TestTaskDocumentWatcher:
 
         assert watcher.is_running() is False
 
-    def test_custom_pattern(self, sample_source_dir, mock_load_callback, temp_dir):
+    def test_custom_pattern(self, sample_queue, mock_load_callback, temp_dir):
         """Test watcher with custom file pattern."""
-        source_path = Path(sample_source_dir.path)
+        queue_path = Path(sample_queue.path)
         # Use a filename that matches task ID format but tests the pattern setting
-        custom_file = source_path / "task-20260206-120000-custom.md"
+        custom_file = queue_path / "pending" / "task-20260206-120000-custom.md"
         custom_file.write_text("# Custom task")
 
         # Use a wildcard pattern that will match our task file
         # Testing that the pattern parameter is properly stored and used
         watcher = TaskDocumentWatcher(
-            source_dir=sample_source_dir,
+            queue=sample_queue,
             load_callback=mock_load_callback,
             pattern="task-*.md",  # Explicitly set pattern (same as default)
             debounce_ms=0
@@ -453,7 +454,7 @@ class TestTaskDocumentWatcher:
         watcher._handle_file_event(file_path, "created")
 
         # Should match pattern and call callback
-        mock_load_callback.assert_called_once_with(file_path, "test-source")
+        mock_load_callback.assert_called_once_with(file_path, "test-queue")
 
 
 class TestWatchdogManager:
@@ -465,15 +466,16 @@ class TestWatchdogManager:
         return MagicMock()
 
     @pytest.fixture
-    def sample_source_dir(self, temp_dir):
-        """Create a sample task source directory."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+    def sample_queue(self, temp_dir):
+        """Create a sample queue."""
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
-        return TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source directory"
+        return Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
     def test_init(self, mock_load_callback):
@@ -483,61 +485,61 @@ class TestWatchdogManager:
         assert manager.load_callback == mock_load_callback
         assert manager._watchers == {}
 
-    def test_add_source(self, mock_load_callback, sample_source_dir):
-        """Test adding a source directory."""
+    def test_add_queue(self, mock_load_callback, sample_queue):
+        """Test adding a queue."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(sample_source_dir)
+        manager.add_queue(sample_queue)
 
-        assert "test-source" in manager._watchers
-        assert isinstance(manager._watchers["test-source"], TaskDocumentWatcher)
+        assert "test-queue" in manager._watchers
+        assert isinstance(manager._watchers["test-queue"], TaskDocumentWatcher)
 
-    def test_add_source_already_exists(self, mock_load_callback, sample_source_dir):
-        """Test adding a source that already exists."""
+    def test_add_queue_already_exists(self, mock_load_callback, sample_queue):
+        """Test adding a queue that already exists."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(source_dir=sample_source_dir)
+        manager.add_queue(queue=sample_queue)
 
-        # Add same source again - should not raise
-        manager.add_source(source_dir=sample_source_dir)
+        # Add same queue again - should not raise
+        manager.add_queue(queue=sample_queue)
 
         # Should still have only one watcher
         assert len(manager._watchers) == 1
 
-    def test_add_source_with_custom_debounce(self, mock_load_callback, sample_source_dir):
-        """Test adding source with custom debounce settings."""
+    def test_add_queue_with_custom_debounce(self, mock_load_callback, sample_queue):
+        """Test adding queue with custom debounce settings."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(sample_source_dir, debounce_ms=1000)
+        manager.add_queue(sample_queue, debounce_ms=1000)
 
-        watcher = manager._watchers["test-source"]
+        watcher = manager._watchers["test-queue"]
         assert watcher.debounce.debounce_seconds == 1.0
 
-    def test_add_source_with_custom_pattern(self, mock_load_callback, sample_source_dir):
-        """Test adding source with custom file pattern."""
+    def test_add_queue_with_custom_pattern(self, mock_load_callback, sample_queue):
+        """Test adding queue with custom file pattern."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(sample_source_dir, pattern="custom-*.md")
+        manager.add_queue(sample_queue, pattern="custom-*.md")
 
-        watcher = manager._watchers["test-source"]
+        watcher = manager._watchers["test-queue"]
         assert watcher.pattern == "custom-*.md"
 
-    def test_remove_source(self, mock_load_callback, sample_source_dir):
-        """Test removing a source directory."""
+    def test_remove_queue(self, mock_load_callback, sample_queue):
+        """Test removing a queue."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(sample_source_dir)
-        assert "test-source" in manager._watchers
+        manager.add_queue(sample_queue)
+        assert "test-queue" in manager._watchers
 
-        manager.remove_source("test-source")
-        assert "test-source" not in manager._watchers
+        manager.remove_queue("test-queue")
+        assert "test-queue" not in manager._watchers
 
     def test_remove_nonexistent_source(self, mock_load_callback):
-        """Test removing a source that doesn't exist."""
+        """Test removing a queue that doesn't exist."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
         # Should not raise
-        manager.remove_source("nonexistent")
+        manager.remove_queue("nonexistent")
 
         assert len(manager._watchers) == 0
 
@@ -545,101 +547,101 @@ class TestWatchdogManager:
         """Test starting all watchers."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        # Create multiple sources
-        source1_path = temp_dir / "source1"
-        source2_path = temp_dir / "source2"
-        source1_path.mkdir(parents=True)
-        source2_path.mkdir(parents=True)
+        # Create multiple queues
+        queue1_path = temp_dir / "queue1"
+        queue2_path = temp_dir / "queue2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_path))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_path))
+        queue1 = Queue(id="queue1", path=str(queue1_path))
+        queue2 = Queue(id="queue2", path=str(queue2_path))
 
-        # Add sources (which starts them)
-        manager.add_source(source1)
-        manager.add_source(source2)
+        # Add queues (which starts them)
+        manager.add_queue(queue1)
+        manager.add_queue(queue2)
 
         # start_all should not cause issues
         manager.start_all()
 
         assert len(manager._watchers) == 2
 
-    def test_stop_all(self, mock_load_callback, sample_source_dir):
+    def test_stop_all(self, mock_load_callback, sample_queue):
         """Test stopping all watchers."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        manager.add_source(sample_source_dir)
+        manager.add_queue(sample_queue)
 
         manager.stop_all()
 
         assert len(manager._watchers) == 0
 
-    def test_is_watching(self, mock_load_callback, sample_source_dir):
+    def test_is_watching(self, mock_load_callback, sample_queue):
         """Test is_watching method."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
         # Not watching initially
-        assert manager.is_watching("test-source") is False
+        assert manager.is_watching("test-queue") is False
 
-        manager.add_source(sample_source_dir)
+        manager.add_queue(sample_queue)
 
         # After adding, should be watching (observer is started)
         # Note: This may be False if observer start fails in test environment
         # We just verify the method works without error
-        result = manager.is_watching("test-source")
+        result = manager.is_watching("test-queue")
         assert isinstance(result, bool)
 
     def test_is_watching_nonexistent_source(self, mock_load_callback):
-        """Test is_watching for non-existent source."""
+        """Test is_watching for non-existent queue."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
         assert manager.is_watching("nonexistent") is False
 
     def test_get_watched_sources(self, mock_load_callback, temp_dir):
-        """Test get_watched_sources method."""
+        """Test get_watched_queues method."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
         # Initially empty
-        assert manager.get_watched_sources() == set()
+        assert manager.get_watched_queues() == set()
 
-        # Add sources
-        source1_path = temp_dir / "source1"
-        source2_path = temp_dir / "source2"
-        source1_path.mkdir(parents=True)
-        source2_path.mkdir(parents=True)
+        # Add queues
+        queue1_path = temp_dir / "queue1"
+        queue2_path = temp_dir / "queue2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_path))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_path))
+        queue1 = Queue(id="queue1", path=str(queue1_path))
+        queue2 = Queue(id="queue2", path=str(queue2_path))
 
-        manager.add_source(source1)
-        manager.add_source(source2)
+        manager.add_queue(queue1)
+        manager.add_queue(queue2)
 
-        # Get watched sources
-        watched = manager.get_watched_sources()
+        # Get watched queues
+        watched = manager.get_watched_queues()
 
-        # Should contain source IDs (may be empty if observers didn't start in test)
+        # Should contain queue IDs (may be empty if observers didn't start in test)
         assert isinstance(watched, set)
 
     def test_multiple_watchers_independent(self, mock_load_callback, temp_dir):
         """Test that multiple watchers operate independently."""
         manager = WatchdogManager(load_callback=mock_load_callback)
 
-        source1_path = temp_dir / "source1"
-        source2_path = temp_dir / "source2"
-        source1_path.mkdir(parents=True)
-        source2_path.mkdir(parents=True)
+        queue1_path = temp_dir / "queue1"
+        queue2_path = temp_dir / "queue2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_path))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_path))
+        queue1 = Queue(id="queue1", path=str(queue1_path))
+        queue2 = Queue(id="queue2", path=str(queue2_path))
 
-        manager.add_source(source1, debounce_ms=100)
-        manager.add_source(source2, debounce_ms=200)
+        manager.add_queue(queue1, debounce_ms=100)
+        manager.add_queue(queue2, debounce_ms=200)
 
         # Each watcher should have its own settings
-        watcher1 = manager._watchers["source1"]
-        watcher2 = manager._watchers["source2"]
+        watcher1 = manager._watchers["queue1"]
+        watcher2 = manager._watchers["queue2"]
 
         assert watcher1.debounce.debounce_seconds == 0.1
         assert watcher2.debounce.debounce_seconds == 0.2
 
-        assert watcher1.source_dir.id == "source1"
-        assert watcher2.source_dir.id == "source2"
+        assert watcher1.queue.id == "queue1"
+        assert watcher2.queue.id == "queue2"

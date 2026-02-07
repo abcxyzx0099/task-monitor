@@ -34,51 +34,52 @@ class TestTaskScannerInit:
         assert scanner.enable_file_hash is True
 
 
-class TestScanTaskSourceDirectory:
-    """Tests for scan_task_source_directory method."""
+class TestScanQueue:
+    """Tests for scan_queue method."""
 
-    def test_scan_nonexistent_directory(self, sample_task_source_dir):
+    def test_scan_nonexistent_directory(self, sample_queue):
         """Test scanning a directory that does not exist."""
         scanner = TaskScanner()
 
-        # Create a source dir pointing to non-existent path
-        nonexistent_dir = TaskSourceDirectory(
+        # Create a queue pointing to non-existent path
+        nonexistent_queue = Queue(
             id="nonexistent",
             path="/nonexistent/path/that/does/not/exist",
-            description="Nonexistent source"
+            description="Nonexistent queue"
         )
 
-        result = scanner.scan_task_source_directory(nonexistent_dir)
+        result = scanner.scan_queue(nonexistent_queue)
 
         assert result == []
 
-    def test_scan_empty_directory(self, sample_task_source_dir):
+    def test_scan_empty_directory(self, sample_queue):
         """Test scanning an empty directory."""
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(sample_task_source_dir)
+        result = scanner.scan_queue(sample_queue)
 
         assert result == []
 
     def test_scan_with_valid_task_files(self, temp_dir):
         """Test scanning directory with valid task files."""
-        # Create source directory
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        # Create queue directory structure
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         # Create valid task files
-        task1 = source_path / "task-20260206-120000-first-task.md"
-        task2 = source_path / "task-20260206-120001-second-task.md"
+        task1 = pending_dir / "task-20260206-120000-first-task.md"
+        task2 = pending_dir / "task-20260206-120001-second-task.md"
         task1.write_text("# Task 1\nContent")
         task2.write_text("# Task 2\nContent")
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         assert len(result) == 2
         assert result[0].task_id == "task-20260206-120000-first-task"
@@ -86,47 +87,49 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_ignores_invalid_task_files(self, temp_dir):
         """Test that scanner ignores files with invalid task ID format."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         # Create invalid task files
-        (source_path / "invalid-name.md").write_text("Invalid")
-        (source_path / "task-123.md").write_text("Invalid format")
-        (source_path / "task-20260206-12.md").write_text("Invalid format")
+        (pending_dir / "invalid-name.md").write_text("Invalid")
+        (pending_dir / "task-123.md").write_text("Invalid format")
+        (pending_dir / "task-20260206-12.md").write_text("Invalid format")
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         assert len(result) == 0
 
     def test_scan_sorts_by_filename(self, temp_dir):
         """Test that scan results are sorted by filename (chronological)."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         # Create task files in non-chronological order
-        task3 = source_path / "task-20260206-120003-third.md"
-        task1 = source_path / "task-20260206-120001-first.md"
-        task2 = source_path / "task-20260206-120002-second.md"
+        task3 = pending_dir / "task-20260206-120003-third.md"
+        task1 = pending_dir / "task-20260206-120001-first.md"
+        task2 = pending_dir / "task-20260206-120002-second.md"
 
         task3.write_text("# Task 3")
         task1.write_text("# Task 1")
         task2.write_text("# Task 2")
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         # Should be sorted chronologically by filename
         assert result[0].task_id == "task-20260206-120001-first"
@@ -135,41 +138,43 @@ class TestScanTaskSourceDirectory:
 
     def test_scan_with_file_hash_disabled(self, temp_dir):
         """Test scanning with file hash calculation disabled."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = pending_dir / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner(enable_file_hash=False)
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         assert len(result) == 1
         assert result[0].file_hash is None
 
     def test_scan_with_file_hash_enabled(self, temp_dir):
         """Test scanning with file hash calculation enabled."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         content = "# Test task"
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = pending_dir / "task-20260206-120000-test.md"
         task_file.write_text(content)
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner(enable_file_hash=True)
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         assert len(result) == 1
         assert result[0].file_hash is not None
@@ -182,10 +187,11 @@ class TestScanTaskSourceDirectory:
         """Test scanning handles OSError when reading file stats."""
         # This test verifies OSError handling in _create_discovered_task
         # We'll test the _create_discovered_task method directly
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = pending_dir / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
         scanner = TaskScanner()
@@ -204,49 +210,51 @@ class TestScanTaskSourceDirectory:
 
         with patch.object(Path, 'stat', mock_stat):
             # Call _create_discovered_task directly to test error handling
-            result = scanner._create_discovered_task(task_file, "test-source")
+            result = scanner._create_discovered_task(task_file, "test-queue")
 
         # Should handle error and return None
         assert result is None
 
     def test_scan_includes_file_size(self, temp_dir):
         """Test that scan includes file size in discovered tasks."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         content = "# Test task\nSome content here"
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = pending_dir / "task-20260206-120000-test.md"
         task_file.write_text(content)
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         assert len(result) == 1
         assert result[0].file_size == len(content.encode())
 
     def test_scan_sets_discovered_at_timestamp(self, temp_dir):
         """Test that scan includes discovery timestamp."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        pending_dir = queue_path / "pending"
+        pending_dir.mkdir(parents=True)
 
         before_scan = datetime.now()
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = pending_dir / "task-20260206-120000-test.md"
         task_file.write_text("# Test task")
 
-        source_dir = TaskSourceDirectory(
-            id="test-source",
-            path=str(source_path),
-            description="Test source"
+        queue = Queue(
+            id="test-queue",
+            path=str(queue_path),
+            description="Test queue"
         )
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directory(source_dir)
+        result = scanner.scan_queue(queue)
 
         after_scan = datetime.now()
 
@@ -255,64 +263,68 @@ class TestScanTaskSourceDirectory:
         assert before_scan <= discovered_at <= after_scan
 
 
-class TestScanTaskSourceDirectories:
-    """Tests for scan_task_source_directories method."""
+class TestScanQueues:
+    """Tests for scan_queues method."""
 
     def test_scan_multiple_sources(self, temp_dir):
-        """Test scanning multiple source directories."""
-        # Create two source directories
-        source1_path = temp_dir / "source1"
-        source2_path = temp_dir / "source2"
-        source1_path.mkdir(parents=True)
-        source2_path.mkdir(parents=True)
+        """Test scanning multiple queue directories."""
+        # Create two queue directories
+        queue1_path = temp_dir / "queue1"
+        queue2_path = temp_dir / "queue2"
+        queue1_pending = queue1_path / "pending"
+        queue2_pending = queue2_path / "pending"
+        queue1_pending.mkdir(parents=True)
+        queue2_pending.mkdir(parents=True)
 
         # Add tasks to each
-        (source1_path / "task-20260206-120000-source1-task.md").write_text("# Source 1 Task")
-        (source2_path / "task-20260206-120001-source2-task.md").write_text("# Source 2 Task")
+        (queue1_pending / "task-20260206-120000-queue1-task.md").write_text("# Queue 1 Task")
+        (queue2_pending / "task-20260206-120001-queue2-task.md").write_text("# Queue 2 Task")
 
-        source_dirs = [
-            TaskSourceDirectory(id="source1", path=str(source1_path), description="Source 1"),
-            TaskSourceDirectory(id="source2", path=str(source2_path), description="Source 2"),
+        queues = [
+            Queue(id="queue1", path=str(queue1_path), description="Queue 1"),
+            Queue(id="queue2", path=str(queue2_path), description="Queue 2"),
         ]
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directories(source_dirs)
+        result = scanner.scan_queues(queues)
 
         assert len(result) == 2
-        assert result[0].task_doc_dir_id == "source1"
-        assert result[1].task_doc_dir_id == "source2"
+        assert result[0].queue_id == "queue1"
+        assert result[1].queue_id == "queue2"
 
     def test_scan_empty_source_list(self):
         """Test scanning with empty source list."""
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directories([])
+        result = scanner.scan_queues([])
 
         assert result == []
 
     def test_scan_multiple_sources_sorts_chronologically(self, temp_dir):
         """Test that scanning multiple sources sorts all tasks chronologically."""
-        source1_path = temp_dir / "source1"
-        source2_path = temp_dir / "source2"
-        source1_path.mkdir(parents=True)
-        source2_path.mkdir(parents=True)
+        queue1_path = temp_dir / "queue1"
+        queue2_path = temp_dir / "queue2"
+        queue1_pending = queue1_path / "pending"
+        queue2_pending = queue2_path / "pending"
+        queue1_pending.mkdir(parents=True)
+        queue2_pending.mkdir(parents=True)
 
         # Add tasks in reverse chronological order across sources
-        (source1_path / "task-20260206-120003-later-source1.md").write_text("# Task 3")
-        (source2_path / "task-20260206-120001-early-source2.md").write_text("# Task 1")
-        (source1_path / "task-20260206-120002-middle-source1.md").write_text("# Task 2")
+        (queue1_pending / "task-20260206-120003-later-queue1.md").write_text("# Task 3")
+        (queue2_pending / "task-20260206-120001-early-queue2.md").write_text("# Task 1")
+        (queue1_pending / "task-20260206-120002-middle-queue1.md").write_text("# Task 2")
 
-        source_dirs = [
-            TaskSourceDirectory(id="source1", path=str(source1_path)),
-            TaskSourceDirectory(id="source2", path=str(source2_path)),
+        queues = [
+            Queue(id="queue1", path=str(queue1_path)),
+            Queue(id="queue2", path=str(queue2_path)),
         ]
 
         scanner = TaskScanner()
-        result = scanner.scan_task_source_directories(source_dirs)
+        result = scanner.scan_queues(queues)
 
         # All tasks should be sorted chronologically regardless of source
-        assert result[0].task_id == "task-20260206-120001-early-source2"
-        assert result[1].task_id == "task-20260206-120002-middle-source1"
-        assert result[2].task_id == "task-20260206-120003-later-source1"
+        assert result[0].task_id == "task-20260206-120001-early-queue2"
+        assert result[1].task_id == "task-20260206-120002-middle-queue1"
+        assert result[2].task_id == "task-20260206-120003-later-queue1"
 
 
 class TestIsFileModified:
@@ -532,43 +544,43 @@ class TestCreateDiscoveredTask:
 
     def test_create_discovered_task_valid(self, temp_dir):
         """Test creating DiscoveredTask from valid file."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc" / "pending"
+        queue_path.mkdir(parents=True)
 
-        task_file = source_path / "task-20260206-120000-test-task.md"
+        task_file = queue_path / "task-20260206-120000-test-task.md"
         task_file.write_text("# Test task")
 
         scanner = TaskScanner()
-        result = scanner._create_discovered_task(task_file, "test-source")
+        result = scanner._create_discovered_task(task_file, "test-queue")
 
         assert result is not None
         assert result.task_id == "task-20260206-120000-test-task"
         assert result.task_doc_file == task_file
-        assert result.task_doc_dir_id == "test-source"
+        assert result.queue_id == "test-queue"
 
     def test_create_discovered_task_invalid_id(self, temp_dir):
         """Test creating DiscoveredTask with invalid task ID returns None."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc" / "pending"
+        queue_path.mkdir(parents=True)
 
-        invalid_file = source_path / "invalid-name.md"
+        invalid_file = queue_path / "invalid-name.md"
         invalid_file.write_text("# Invalid task")
 
         scanner = TaskScanner()
-        result = scanner._create_discovered_task(invalid_file, "test-source")
+        result = scanner._create_discovered_task(invalid_file, "test-queue")
 
         assert result is None
 
     def test_create_discovered_task_with_zero_byte_file(self, temp_dir):
         """Test creating DiscoveredTask from zero-byte file."""
-        source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_path.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc" / "pending"
+        queue_path.mkdir(parents=True)
 
-        task_file = source_path / "task-20260206-120000-test.md"
+        task_file = queue_path / "task-20260206-120000-test.md"
         task_file.write_text("")  # Empty file
 
         scanner = TaskScanner(enable_file_hash=True)
-        result = scanner._create_discovered_task(task_file, "test-source")
+        result = scanner._create_discovered_task(task_file, "test-queue")
 
         assert result is not None
         assert result.file_size == 0

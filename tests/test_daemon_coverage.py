@@ -106,7 +106,7 @@ class TestSetupWatchdog:
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [],
+            "queues": [],
             "settings": {
                 "watch_enabled": True,
                 "watch_debounce_ms": 500,
@@ -124,14 +124,14 @@ class TestSetupWatchdog:
     def test_setup_watchdog_disabled(self, temp_dir):
         """Test watchdog setup when watch_enabled is false."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {
                 "watch_enabled": False,  # Disabled
@@ -147,20 +147,20 @@ class TestSetupWatchdog:
         # Watchdog manager is created but monitoring is disabled (early return)
         # No sources should be watched
         if daemon.watchdog_manager:
-            watched = daemon.watchdog_manager.get_watched_sources()
+            watched = daemon.watchdog_manager.get_watched_queues()
             assert len(watched) == 0
 
     def test_setup_watchdog_creates_events(self, temp_dir):
         """Test that setup_watchdog creates events for sources."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {
                 "watch_enabled": True,
@@ -179,17 +179,17 @@ class TestSetupWatchdog:
     def test_setup_watchdog_multiple_sources(self, temp_dir):
         """Test setup_watchdog with multiple sources."""
         config_file = temp_dir / "config.json"
-        source1_dir = temp_dir / "source1"
-        source2_dir = temp_dir / "source2"
-        source1_dir.mkdir(parents=True)
-        source2_dir.mkdir(parents=True)
+        queue1_path = temp_dir / "source1"
+        queue2_path = temp_dir / "source2"
+        (queue1_path / "pending").mkdir(parents=True)
+        (queue2_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source1_dir)},
-                {"id": "source2", "path": str(source2_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue1_path)},
+                {"id": "source2", "path": str(queue2_path)}
             ],
             "settings": {
                 "watch_enabled": True,
@@ -208,14 +208,14 @@ class TestSetupWatchdog:
     def test_setup_watchdog_default_pattern(self, temp_dir):
         """Test watchdog setup with default pattern when none specified."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {
                 "watch_enabled": True,
@@ -232,14 +232,14 @@ class TestSetupWatchdog:
     def test_setup_watchdog_already_initialized(self, temp_dir):
         """Test calling setup_watchdog when already initialized."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {
                 "watch_enabled": True,
@@ -301,8 +301,8 @@ class TestWorkerLoopEdgeCases:
 
     def test_worker_loop_with_no_event(self, temp_dir):
         """Test worker loop when no event is found for source."""
-        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        (queue_path / "pending").mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
         daemon.running = True
@@ -311,18 +311,18 @@ class TestWorkerLoopEdgeCases:
         from task_queue.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
-        source = TaskSourceDirectory(id="test", path=str(source_dir))
+        queue = Queue(id="test", path=str(queue_path))
 
         # No event created - worker should return early
-        daemon._worker_loop(source)
+        daemon._worker_loop(queue)
 
         # Should complete without crashing
         assert True
 
     def test_worker_loop_handles_exception(self, temp_dir):
         """Test worker loop handles exceptions gracefully."""
-        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        (queue_path / "pending").mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
         daemon.running = True
@@ -331,14 +331,14 @@ class TestWorkerLoopEdgeCases:
         from task_queue.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
-        source = TaskSourceDirectory(id="test", path=str(source_dir))
+        queue = Queue(id="test", path=str(queue_path))
         daemon._source_events["test"] = threading.Event()
 
         # Mock pick_next_task to raise exception
         def raise_exception(*args, **kwargs):
             raise RuntimeError("Test error")
 
-        daemon.task_runner.pick_next_task_from_source = raise_exception
+        daemon.task_runner.pick_next_task_from_queue = raise_exception
 
         # Stop after exception
         def stop_after_error():
@@ -350,14 +350,14 @@ class TestWorkerLoopEdgeCases:
         stopper.start()
 
         # Should handle exception and continue
-        daemon._worker_loop(source)
+        daemon._worker_loop(queue)
 
         stopper.join()
 
     def test_worker_loop_with_no_tasks(self, temp_dir):
         """Test worker loop when there are no tasks."""
-        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        (queue_path / "pending").mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
         daemon.running = True
@@ -366,7 +366,7 @@ class TestWorkerLoopEdgeCases:
         from task_queue.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
-        source = TaskSourceDirectory(id="test", path=str(source_dir))
+        queue = Queue(id="test", path=str(queue_path))
         daemon._source_events["test"] = threading.Event()
 
         # Stop after timeout
@@ -379,14 +379,14 @@ class TestWorkerLoopEdgeCases:
         stopper.start()
 
         # Should wait on event with timeout
-        daemon._worker_loop(source)
+        daemon._worker_loop(queue)
 
         stopper.join()
 
     def test_worker_loop_respects_shutdown_flag(self, temp_dir):
         """Test that worker loop exits when shutdown is requested."""
-        source_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "tasks" / "ad-hoc"
+        (queue_path / "pending").mkdir(parents=True)
 
         daemon = TaskQueueDaemon()
         daemon.running = True
@@ -395,13 +395,13 @@ class TestWorkerLoopEdgeCases:
         from task_queue.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
-        source = TaskSourceDirectory(id="test", path=str(source_dir))
+        queue = Queue(id="test", path=str(queue_path))
         daemon._source_events["test"] = threading.Event()
 
         # Immediately request shutdown
         daemon.shutdown_requested = True
 
-        daemon._worker_loop(source)
+        daemon._worker_loop(queue)
 
         # Should exit immediately
 
@@ -453,14 +453,14 @@ class TestShutdown:
     def test_shutdown_with_watchdog(self, temp_dir):
         """Test shutdown stops watchdog manager."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {
                 "watch_enabled": True,
@@ -568,7 +568,7 @@ class TestStartMethod:
         config_data = {
             "version": "2.0",
             "project_workspace": "",  # Empty workspace
-            "task_source_directories": [],
+            "queues": [],
             "settings": {}
         }
         config_file.write_text(json.dumps(config_data))
@@ -582,14 +582,14 @@ class TestStartMethod:
     def test_start_creates_task_runner(self, temp_dir):
         """Test that start() creates the task runner."""
         config_file = temp_dir / "config.json"
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir(parents=True)
+        queue_path = temp_dir / "source1"
+        (queue_path / "pending").mkdir(parents=True)
 
         config_data = {
             "version": "2.0",
             "project_workspace": str(temp_dir),
-            "task_source_directories": [
-                {"id": "source1", "path": str(source_dir)}
+            "queues": [
+                {"id": "source1", "path": str(queue_path)}
             ],
             "settings": {"watch_enabled": False}
         }
@@ -621,7 +621,7 @@ class TestRunLoop:
         source_dir.mkdir(parents=True)
 
         from task_queue.models import Queue
-        source = TaskSourceDirectory(id="source1", path=str(source_dir))
+        source = Queue(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()
         daemon.task_runner = Mock()
@@ -652,7 +652,7 @@ class TestRunLoop:
         source_dir.mkdir(parents=True)
 
         from task_queue.models import Queue
-        source = TaskSourceDirectory(id="source1", path=str(source_dir))
+        source = Queue(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()
         daemon.task_runner = Mock()
