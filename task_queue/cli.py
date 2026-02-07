@@ -60,13 +60,13 @@ def cmd_init(args):
     queues = [
         {
             "id": "ad-hoc",
-            "path": project_workspace / "tasks" / "ad-hoc" / "pending",
+            "path": project_workspace / "tasks" / "ad-hoc",
             "description": "Quick, spontaneous tasks from conversation",
             "subdirs": ["staging", "pending", "completed", "failed", "results", "reports", "planning"]
         },
         {
             "id": "planned",
-            "path": project_workspace / "tasks" / "planned" / "pending",
+            "path": project_workspace / "tasks" / "planned",
             "description": "Organized, sequential tasks from planning docs",
             "subdirs": ["staging", "pending", "completed", "failed", "results", "reports", "planning"]
         }
@@ -85,9 +85,9 @@ def cmd_init(args):
 
     print("\n📂 Creating directory structure...")
     for queue in queues:
-        queue_base = queue["path"].parent
+        queue_path = queue["path"]
         for subdir in queue["subdirs"]:
-            subdir_path = queue_base / subdir
+            subdir_path = queue_path / subdir
             try:
                 subdir_path.mkdir(parents=True, exist_ok=True)
                 print(f"   ✅ Created: {subdir_path.relative_to(project_workspace)}")
