@@ -1,4 +1,4 @@
-"""Test fixtures for task-queue tests (Directory-Based State Architecture)."""
+"""Test fixtures for task-monitor tests (Directory-Based State Architecture)."""
 
 import pytest
 import tempfile
@@ -8,7 +8,7 @@ from datetime import datetime
 from unittest.mock import Mock
 
 from task_queue.models import (
-    QueueConfig, TaskSourceDirectory, QueueSettings, DiscoveredTask
+    MonitorConfig, Queue, MonitorSettings, DiscoveredTask
 )
 
 
@@ -23,13 +23,12 @@ def temp_dir():
 @pytest.fixture
 def project_root(temp_dir):
     """Create a mock project root with task directories."""
-    task_spec_dir = temp_dir / "tasks" / "ad-hoc" / "pending"
-    task_archive_dir = temp_dir / "tasks" / "ad-hoc" / "completed"
-    task_failed_dir = temp_dir / "tasks" / "ad-hoc" / "failed"
-
-    task_spec_dir.mkdir(parents=True)
-    task_archive_dir.mkdir(parents=True)
-    task_failed_dir.mkdir(parents=True)
+    queue_path = temp_dir / "tasks" / "ad-hoc"
+    queue_path.mkdir(parents=True)
+    (queue_path / "pending").mkdir(parents=True)
+    (queue_path / "completed").mkdir(parents=True)
+    (queue_path / "failed").mkdir(parents=True)
+    (queue_path / "results").mkdir(parents=True)
 
     return temp_dir
 
@@ -53,31 +52,39 @@ def task_failed_dir(project_root):
 
 
 @pytest.fixture
-def sample_task_source_dir(temp_dir):
-    """Create a sample TaskSourceDirectory."""
-    source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-    source_path.mkdir(parents=True)
+def sample_queue(temp_dir):
+    """Create a sample Queue with proper directory structure."""
+    queue_path = temp_dir / "tasks" / "test-queue"
+    queue_path.mkdir(parents=True)
+    (queue_path / "pending").mkdir(exist_ok=True)
+    (queue_path / "completed").mkdir(exist_ok=True)
+    (queue_path / "failed").mkdir(exist_ok=True)
+    (queue_path / "results").mkdir(exist_ok=True)
 
-    return TaskSourceDirectory(
-        id="test-source",
-        path=str(source_path),
-        description="Test source directory"
+    return Queue(
+        id="test-queue",
+        path=str(queue_path),
+        description="Test queue"
     )
 
 
 @pytest.fixture
 def sample_config(temp_dir):
-    """Create a sample QueueConfig."""
-    source_path = temp_dir / "tasks" / "ad-hoc" / "pending"
-    source_path.mkdir(parents=True)
+    """Create a sample MonitorConfig with proper queue directory structure."""
+    queue_path = temp_dir / "tasks" / "ad-hoc"
+    queue_path.mkdir(parents=True)
+    (queue_path / "pending").mkdir(exist_ok=True)
+    (queue_path / "completed").mkdir(exist_ok=True)
+    (queue_path / "failed").mkdir(exist_ok=True)
+    (queue_path / "results").mkdir(exist_ok=True)
 
-    return QueueConfig(
+    return MonitorConfig(
         project_workspace=str(temp_dir),
-        task_source_directories=[
-            TaskSourceDirectory(
-                id="test-source",
-                path=str(source_path),
-                description="Test source directory"
+        queues=[
+            Queue(
+                id="ad-hoc",
+                path=str(queue_path),
+                description="Ad-hoc tasks"
             )
         ]
     )
@@ -85,8 +92,8 @@ def sample_config(temp_dir):
 
 @pytest.fixture
 def sample_settings():
-    """Create sample QueueSettings."""
-    return QueueSettings(
+    """Create sample MonitorSettings."""
+    return MonitorSettings(
         watch_enabled=True,
         watch_debounce_ms=500,
         watch_patterns=["task-*.md"],
@@ -95,10 +102,14 @@ def sample_settings():
 
 
 @pytest.fixture
-def task_spec_file(task_source_dir):
+def task_spec_file(temp_dir):
     """Create a sample task specification file."""
+    task_spec_dir = temp_dir / "tasks" / "ad-hoc"
+    task_spec_dir.mkdir(parents=True)
+    (task_spec_dir / "pending").mkdir(exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    task_file = task_source_dir / f"task-{timestamp}-test-task.md"
+    task_file = task_spec_dir / "pending" / f"task-{timestamp}-test-task.md"
     task_file.write_text("""# Task: Test Task
 
 Test task description
@@ -107,12 +118,16 @@ Test task description
 
 
 @pytest.fixture
-def multiple_task_files(task_source_dir):
+def multiple_task_files(temp_dir):
     """Create multiple task specification files."""
+    task_spec_dir = temp_dir / "tasks" / "ad-hoc"
+    task_spec_dir.mkdir(parents=True)
+    (task_spec_dir / "pending").mkdir(exist_ok=True)
+
     tasks = []
     for i in range(3):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = task_source_dir / f"task-{timestamp}-test-{i:02d}.md"
+        task_file = task_spec_dir / "pending" / f"task-{timestamp}-test-{i:02d}.md"
         task_file.write_text(f"# Task: Test Task {i}\n\nTest description\n")
         tasks.append(task_file)
     return tasks

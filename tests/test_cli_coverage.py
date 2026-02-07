@@ -15,7 +15,7 @@ from io import StringIO
 import sys
 
 from task_queue.cli import (
-    cmd_status, cmd_sources_add, cmd_sources_list, cmd_sources_rm,
+    cmd_status, cmd_queues_add, cmd_queues_list, cmd_queues_rm,
     cmd_run, _restart_daemon, main
 )
 from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
@@ -106,7 +106,7 @@ class TestCmdStatusEdgeCases:
                     "enable_file_hash": True
                 },
                 "project_workspace": None,  # No workspace set
-                "task_source_directories": []
+                "task_queues": []
             }
             json.dump(config, f)
             f.flush()
@@ -131,7 +131,7 @@ class TestCmdStatusEdgeCases:
         finally:
             Path(config_path).unlink(missing_ok=True)
 
-    def test_cmd_status_no_source_directories(self, temp_dir):
+    def test_cmd_status_no_queues(self, temp_dir):
         """Test cmd_status with no source directories configured."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -149,7 +149,7 @@ class TestCmdStatusEdgeCases:
                         "enable_file_hash": True
                     },
                     "project_workspace": str(workspace),
-                    "task_source_directories": []  # No sources
+                    "task_queues": []  # No sources
                 }
                 json.dump(config, f)
                 f.flush()
@@ -195,7 +195,7 @@ class TestCmdStatusEdgeCases:
                         "enable_file_hash": True
                     },
                     "project_workspace": str(workspace),
-                    "task_source_directories": [
+                    "task_queues": [
                         {
                             "id": "main",
                             "path": str(task_dir),
@@ -228,10 +228,10 @@ class TestCmdStatusEdgeCases:
                 Path(config_path).unlink(missing_ok=True)
 
 
-class TestCmdListSourcesEdgeCases:
-    """Tests for cmd_sources_list edge cases."""
+class TestCmdListQueuesEdgeCases:
+    """Tests for cmd_queues_list edge cases."""
 
-    def test_cmd_sources_list_empty(self, temp_dir):
+    def test_cmd_queues_list_empty(self, temp_dir):
         """Test list-sources with no sources configured."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             config = {
@@ -243,7 +243,7 @@ class TestCmdListSourcesEdgeCases:
                     "watch_recursive": False
                 },
                 "project_workspace": None,
-                "task_source_directories": []
+                "task_queues": []
             }
             json.dump(config, f)
             f.flush()
@@ -256,7 +256,7 @@ class TestCmdListSourcesEdgeCases:
             sys.stdout = StringIO()
 
             try:
-                result = cmd_sources_list(args)
+                result = cmd_queues_list(args)
                 output = sys.stdout.getvalue()
             finally:
                 sys.stdout = old_stdout
@@ -267,11 +267,11 @@ class TestCmdListSourcesEdgeCases:
         finally:
             Path(config_path).unlink(missing_ok=True)
 
-    def test_cmd_sources_list_config_error(self, capsys):
+    def test_cmd_queues_list_config_error(self, capsys):
         """Test list-sources handles config errors."""
         args = MagicMock(config="/nonexistent/config.json")
 
-        result = cmd_sources_list(args)
+        result = cmd_queues_list(args)
 
         assert result == 1
         captured = capsys.readouterr()
@@ -298,7 +298,7 @@ class TestCmdRun:
                     "watch_recursive": False
                 },
                 "project_workspace": str(workspace),
-                "task_source_directories": [
+                "task_queues": [
                     {
                         "id": "main",
                         "path": str(task_dir),
@@ -321,7 +321,7 @@ class TestCmdRun:
                 "version": "2.0",
                 "settings": {},
                 "project_workspace": None,
-                "task_source_directories": []
+                "task_queues": []
             }
             json.dump(config, f)
             f.flush()
@@ -500,7 +500,7 @@ class TestMainFunction:
                 "version": "2.0",
                 "settings": {},
                 "project_workspace": None,
-                "task_source_directories": []
+                "task_queues": []
             }
             json.dump(config, f)
             f.flush()
@@ -532,7 +532,7 @@ class TestMainFunction:
                     "version": "2.0",
                     "settings": {},
                     "project_workspace": None,
-                    "task_source_directories": []
+                    "task_queues": []
                 }, f)
 
             # Test without --config arg
@@ -550,11 +550,11 @@ class TestMainFunction:
             default_config.unlink(missing_ok=True)
 
 
-class TestCmdRegisterEdgeCases:
-    """Additional tests for cmd_sources_add error handling."""
+class TestCmdAddQueueEdgeCases:
+    """Additional tests for cmd_queues_add error handling."""
 
-    def test_cmd_sources_add_exception_handling(self, temp_dir, capsys):
-        """Test cmd_sources_add handles exceptions."""
+    def test_cmd_queues_add_exception_handling(self, temp_dir, capsys):
+        """Test cmd_queues_add handles exceptions."""
         # Use invalid workspace path
         args = MagicMock(
             config="/nonexistent/config.json",
@@ -563,24 +563,24 @@ class TestCmdRegisterEdgeCases:
             source_id="test"
         )
 
-        result = cmd_sources_add(args)
+        result = cmd_queues_add(args)
 
         assert result == 1
         captured = capsys.readouterr()
         assert "Error:" in captured.err
 
 
-class TestCmdUnregisterEdgeCases:
-    """Additional tests for cmd_sources_rm error handling."""
+class TestCmdRemoveQueueEdgeCases:
+    """Additional tests for cmd_queues_rm error handling."""
 
-    def test_cmd_sources_rm_exception_handling(self, capsys):
-        """Test cmd_sources_rm handles exceptions."""
+    def test_cmd_queues_rm_exception_handling(self, capsys):
+        """Test cmd_queues_rm handles exceptions."""
         args = MagicMock(
             config="/nonexistent/config.json",
             source_id="test"
         )
 
-        result = cmd_sources_rm(args)
+        result = cmd_queues_rm(args)
 
         assert result == 1
         captured = capsys.readouterr()

@@ -9,7 +9,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 from task_queue.task_runner import TaskRunner
-from task_queue.models import TaskSourceDirectory
+from task_queue.models import Queue
 
 
 class TestTaskRunnerInit:
@@ -30,26 +30,26 @@ class TestPickNextTask:
     def test_pick_next_task_from_empty_source(self, project_root):
         """Test picking from empty source."""
         runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
+        queue = Queue(
             id="test",
-            path=str(project_root / "tasks" / "ad-hoc" / "pending")
+            path=str(project_root / "tasks" / "ad-hoc")
         )
 
-        task = runner.pick_next_task_from_source(source_dir)
+        task = runner.pick_next_task_from_queue(queue)
         assert task is None
 
-    def test_pick_next_task_from_source(self, multiple_task_files, project_root):
+    def test_pick_next_task_from_queue(self, multiple_task_files, project_root):
         """Test picking tasks from a source."""
         runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
+        queue = Queue(
             id="test",
-            path=str(project_root / "tasks" / "ad-hoc" / "pending")
+            path=str(project_root / "tasks" / "ad-hoc")
         )
 
         # Tasks should be picked in chronological order
         tasks = []
         for _ in range(3):
-            task = runner.pick_next_task_from_source(source_dir)
+            task = runner.pick_next_task_from_queue(queue)
             if task:
                 tasks.append(task)
 
@@ -74,8 +74,8 @@ class TestPickNextTask:
         task2.write_text("# Task 2")
 
         runner = TaskRunner(str(project_root))
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_dir))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_dir))
+        source1 = Queue(id="source1", path=str(source1_dir))
+        source2 = Queue(id="source2", path=str(source2_dir))
 
         # Pick from all sources - should return the earliest by filename
         task = runner.pick_next_task([source1, source2])
@@ -150,12 +150,12 @@ class TestGetStatus:
     def test_get_status_empty(self, project_root):
         """Test status with no tasks."""
         runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
+        queue = Queue(
             id="test",
-            path=str(project_root / "tasks" / "ad-hoc" / "pending")
+            path=str(project_root / "tasks" / "ad-hoc")
         )
 
-        status = runner.get_status([source_dir])
+        status = runner.get_status([queue])
 
         assert status['pending'] == 0
         assert status['completed'] == 0
@@ -164,12 +164,12 @@ class TestGetStatus:
     def test_get_status_with_pending_tasks(self, multiple_task_files, project_root):
         """Test status with pending tasks."""
         runner = TaskRunner(str(project_root))
-        source_dir = TaskSourceDirectory(
+        queue = Queue(
             id="test",
-            path=str(project_root / "tasks" / "ad-hoc" / "pending")
+            path=str(project_root / "tasks" / "ad-hoc")
         )
 
-        status = runner.get_status([source_dir])
+        status = runner.get_status([queue])
 
         assert status['pending'] == 3
         assert 'test' in status['sources']
@@ -194,8 +194,8 @@ class TestGetStatus:
             task.write_text("# Task")
 
         runner = TaskRunner(str(project_root))
-        source1 = TaskSourceDirectory(id="source1", path=str(source1_dir))
-        source2 = TaskSourceDirectory(id="source2", path=str(source2_dir))
+        source1 = Queue(id="source1", path=str(source1_dir))
+        source2 = Queue(id="source2", path=str(source2_dir))
 
         status = runner.get_status([source1, source2])
 

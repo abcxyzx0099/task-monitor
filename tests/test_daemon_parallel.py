@@ -9,7 +9,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 from task_queue.daemon import TaskQueueDaemon
-from task_queue.models import TaskSourceDirectory
+from task_queue.models import Queue
 
 
 class TestParallelWorkerSetup:

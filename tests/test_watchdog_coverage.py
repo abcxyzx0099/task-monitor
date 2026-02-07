@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock, Mock
 from watchdog.events import FileCreatedEvent, FileModifiedEvent, DirCreatedEvent
 
 from task_queue.watchdog import DebounceTracker, TaskDocumentWatcher, WatchdogManager
-from task_queue.models import TaskSourceDirectory
+from task_queue.models import Queue
 
 
 class TestDebounceTracker:

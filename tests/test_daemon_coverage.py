@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch, MagicMock
 from argparse import Namespace
 
 from task_queue.daemon import TaskQueueDaemon, WORKER_KEEPALIVE_TIMEOUT, WORKER_RETRY_DELAY, WORKER_CYCLE_PAUSE
-from task_queue.models import TaskSourceDirectory
+from task_queue.models import Queue
 
 
 class TestDaemonInit:
@@ -620,7 +620,7 @@ class TestRunLoop:
         source_dir = temp_dir / "source1"
         source_dir.mkdir(parents=True)
 
-        from task_queue.models import TaskSourceDirectory
+        from task_queue.models import Queue
         source = TaskSourceDirectory(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()
@@ -651,7 +651,7 @@ class TestRunLoop:
         source_dir = temp_dir / "source1"
         source_dir.mkdir(parents=True)
 
-        from task_queue.models import TaskSourceDirectory
+        from task_queue.models import Queue
         source = TaskSourceDirectory(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()

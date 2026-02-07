@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from task_queue.config import ConfigManager
-from task_queue.models import QueueConfig, TaskSourceDirectory
+from task_queue.models import MonitorConfig, Queue
 
 
 class TestConfigManager:
@@ -23,9 +23,9 @@ class TestConfigManager:
 
     def test_create_default_config(self, default_config_manager):
         """Test creating default configuration."""
-        assert isinstance(default_config_manager.config, QueueConfig)
+        assert isinstance(default_config_manager.config, MonitorConfig)
         assert default_config_manager.config.project_workspace is None
-        assert len(default_config_manager.config.task_source_directories) == 0
+        assert len(default_config_manager.config.queues) == 0
 
     def test_load_existing_config(self, config_file, tmp_path):
         """Test loading existing configuration (with backward compatibility)."""
@@ -63,7 +63,7 @@ class TestConfigManager:
         config_data = {
             "version": "1.0",
             "project_workspace": str(tmp_path),
-            "task_source_directories": [
+            "queues": [
                 {
                     "id": "main",
                     "path": str(source_dir),
@@ -85,50 +85,50 @@ class TestConfigManager:
         # Load config
         manager = ConfigManager(config_file)
         assert manager.config.project_workspace == str(tmp_path)
-        assert len(manager.config.task_source_directories) == 1
-        assert manager.config.task_source_directories[0].id == "main"
+        assert len(manager.config.queues) == 1
+        assert manager.config.queues[0].id == "main"
 
     def test_set_project_workspace(self, default_config_manager, tmp_path):
         """Test setting project workspace."""
         default_config_manager.set_project_workspace(str(tmp_path))
         assert default_config_manager.config.project_workspace == str(tmp_path.resolve())
 
-    def test_add_task_source_directory(self, default_config_manager, tmp_path):
+    def test_add_queue(self, default_config_manager, tmp_path):
         """Test adding a task source directory."""
         source_dir = tmp_path / "sources"
         source_dir.mkdir()
 
-        source = default_config_manager.add_task_source_directory(
+        source = default_config_manager.add_queue(
             path=str(source_dir),
             id="main",
             description="Test sources"
         )
         assert source.id == "main"
-        assert len(default_config_manager.config.task_source_directories) == 1
+        assert len(default_config_manager.config.queues) == 1
 
-    def test_remove_task_source_directory(self, default_config_manager, tmp_path):
+    def test_remove_queue(self, default_config_manager, tmp_path):
         """Test removing a task source directory."""
         source_dir = tmp_path / "sources"
         source_dir.mkdir()
 
-        default_config_manager.add_task_source_directory(path=str(source_dir), id="main")
-        assert len(default_config_manager.config.task_source_directories) == 1
+        default_config_manager.add_queue(path=str(source_dir), id="main")
+        assert len(default_config_manager.config.queues) == 1
 
-        result = default_config_manager.remove_task_source_directory("main")
+        result = default_config_manager.remove_queue("main")
         assert result is True
-        assert len(default_config_manager.config.task_source_directories) == 0
+        assert len(default_config_manager.config.queues) == 0
 
-    def test_list_task_source_directories(self, default_config_manager, tmp_path):
+    def test_list_queues(self, default_config_manager, tmp_path):
         """Test listing task source directories."""
         source_dir1 = tmp_path / "sources1"
         source_dir2 = tmp_path / "sources2"
         source_dir1.mkdir()
         source_dir2.mkdir()
 
-        default_config_manager.add_task_source_directory(path=str(source_dir1), id="sources1")
-        default_config_manager.add_task_source_directory(path=str(source_dir2), id="sources2")
+        default_config_manager.add_queue(path=str(source_dir1), id="sources1")
+        default_config_manager.add_queue(path=str(source_dir2), id="sources2")
 
-        sources = default_config_manager.list_task_source_directories()
+        sources = default_config_manager.list_queues()
         assert len(sources) == 2
         assert sources[0].id == "sources1"
         assert sources[1].id == "sources2"
@@ -140,7 +140,7 @@ class TestConfigManager:
 
         # Modify config
         default_config_manager.set_project_workspace(str(tmp_path))
-        default_config_manager.add_task_source_directory(path=str(source_dir), id="main")
+        default_config_manager.add_queue(path=str(source_dir), id="main")
 
         # Save
         default_config_manager.save_config()
@@ -148,4 +148,4 @@ class TestConfigManager:
         # Reload in a new manager
         new_manager = ConfigManager(default_config_manager.config_file)
         assert new_manager.config.project_workspace == str(tmp_path.resolve())
-        assert len(new_manager.config.task_source_directories) == 1
+        assert len(new_manager.config.queues) == 1

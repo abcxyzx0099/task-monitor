@@ -12,7 +12,7 @@ from datetime import datetime
 from unittest.mock import patch, Mock
 
 from task_queue.scanner import TaskScanner
-from task_queue.models import TaskSourceDirectory, DiscoveredTask
+from task_queue.models import Queue, DiscoveredTask
 
 
 class TestTaskScannerInit:
