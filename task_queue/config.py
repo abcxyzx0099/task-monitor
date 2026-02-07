@@ -9,11 +9,7 @@ from typing import Optional, List
 
 from task_queue.models import MonitorConfig, Queue
 from task_queue.file_utils import AtomicFileWriter, FileLock
-
-
-# Default configuration paths
-DEFAULT_CONFIG_DIR = Path.home() / ".config" / "task-monitor"
-DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.json"
+from task_queue.constants import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
 
 
 class ConfigManager:
@@ -51,9 +47,6 @@ class ConfigManager:
             # Handle migration from old config format
             if "task_source_directories" in data:
                 data["queues"] = data.pop("task_source_directories")
-            if "QueueSettings" in str(data.get("settings", {})):
-                # QueueSettings -> MonitorSettings is just a rename
-                pass
             return MonitorConfig(**data)
         except Exception as e:
             print(f"Warning: Invalid config file, using defaults: {e}")

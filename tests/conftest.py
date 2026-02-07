@@ -104,12 +104,13 @@ def sample_settings():
 @pytest.fixture
 def task_spec_file(temp_dir):
     """Create a sample task specification file."""
-    task_spec_dir = temp_dir / "tasks" / "ad-hoc"
-    task_spec_dir.mkdir(parents=True)
-    (task_spec_dir / "pending").mkdir(exist_ok=True)
+    queue_path = temp_dir / "tasks" / "ad-hoc"
+    queue_path.mkdir(parents=True)
+    pending_dir = queue_path / "pending"
+    pending_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    task_file = task_spec_dir / "pending" / f"task-{timestamp}-test-task.md"
+    task_file = pending_dir / f"task-{timestamp}-test-task.md"
     task_file.write_text("""# Task: Test Task
 
 Test task description
@@ -120,14 +121,15 @@ Test task description
 @pytest.fixture
 def multiple_task_files(temp_dir):
     """Create multiple task specification files."""
-    task_spec_dir = temp_dir / "tasks" / "ad-hoc"
-    task_spec_dir.mkdir(parents=True)
-    (task_spec_dir / "pending").mkdir(exist_ok=True)
+    queue_path = temp_dir / "tasks" / "ad-hoc"
+    queue_path.mkdir(parents=True)
+    pending_dir = queue_path / "pending"
+    pending_dir.mkdir(exist_ok=True)
 
     tasks = []
     for i in range(3):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        task_file = task_spec_dir / "pending" / f"task-{timestamp}-test-{i:02d}.md"
+        task_file = pending_dir / f"task-{timestamp}-test-{i:02d}.md"
         task_file.write_text(f"# Task: Test Task {i}\n\nTest description\n")
         tasks.append(task_file)
     return tasks
