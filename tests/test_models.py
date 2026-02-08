@@ -7,7 +7,7 @@ from pydantic import ValidationError
 import tempfile
 import shutil
 
-from task_queue.models import (
+from task_monitor.models import (
     Queue, MonitorSettings, MonitorConfig, DiscoveredTask
 )
 

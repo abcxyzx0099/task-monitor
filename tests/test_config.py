@@ -1,11 +1,11 @@
-"""Tests for task_queue config module."""
+"""Tests for task_monitor config module."""
 
 import pytest
 import json
 from pathlib import Path
 
-from task_queue.config import ConfigManager
-from task_queue.models import MonitorConfig, Queue
+from task_monitor.config import ConfigManager
+from task_monitor.models import MonitorConfig, Queue
 
 
 class TestConfigManager:

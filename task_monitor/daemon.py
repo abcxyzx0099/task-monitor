@@ -20,10 +20,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List
 
-from task_queue.task_runner import TaskRunner
-from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
-from task_queue.watchdog import WatchdogManager
-from task_queue.models import Queue
+from task_monitor.task_runner import TaskRunner
+from task_monitor.config import ConfigManager, DEFAULT_CONFIG_FILE
+from task_monitor.watchdog import WatchdogManager
+from task_monitor.models import Queue
 
 
 # Worker timeouts
@@ -46,7 +46,7 @@ logging.basicConfig(
 logging.getLogger("watchdog.observers.inotify_buffer").setLevel(logging.WARNING)
 logging.getLogger("watchdog.observers").setLevel(logging.WARNING)
 
-logger = logging.getLogger("task-queue")
+logger = logging.getLogger("task-monitor")
 
 
 class TaskQueueDaemon:
@@ -181,7 +181,7 @@ class TaskQueueDaemon:
     def start(self) -> None:
         """Start the daemon."""
         logger.info("="*60)
-        logger.info("Task Queue Daemon Starting")
+        logger.info("Task Monitor Daemon Starting")
         logger.info("="*60)
 
         # Load configuration
@@ -312,7 +312,7 @@ class TaskQueueDaemon:
     def _shutdown(self) -> None:
         """Perform graceful shutdown."""
         logger.info("="*60)
-        logger.info("Task Queue Daemon Shutting Down")
+        logger.info("Task Monitor Daemon Shutting Down")
         logger.info("="*60)
 
         self.running = False
@@ -344,7 +344,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Task Queue Daemon (Directory-Based State)"
+        description="Task Monitor Daemon (Directory-Based State)"
     )
     parser.add_argument(
         "--config",

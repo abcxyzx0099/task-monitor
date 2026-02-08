@@ -7,9 +7,9 @@ Handles loading, saving, and updating monitor configuration.
 from pathlib import Path
 from typing import Optional, List
 
-from task_queue.models import MonitorConfig, Queue
-from task_queue.file_utils import AtomicFileWriter, FileLock
-from task_queue.constants import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
+from task_monitor.models import MonitorConfig, Queue
+from task_monitor.file_utils import AtomicFileWriter, FileLock
+from task_monitor.constants import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
 
 
 class ConfigManager:

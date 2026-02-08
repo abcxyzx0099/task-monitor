@@ -84,7 +84,7 @@ class TestCLICommands:
             # Run sources add command
             result = subprocess.run(
                 [
-                    "python3", "-m", "task_queue.cli",
+                    "python3", "-m", "task_monitor.cli",
                     "--config", str(config_file),
                     "queues", "add", str(queue_path),
                     "--id", "test-source",
@@ -108,8 +108,8 @@ class TestCLICommands:
 
     def test_register_adds_source(self, temp_config, temp_workspace, mock_systemctl):
         """Test that register adds a source directory to config."""
-        from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_queues_add
+        from task_monitor.config import ConfigManager
+        from task_monitor.cli import cmd_queues_add
         from argparse import Namespace
 
         # Create args - queues add uses 'id' not 'queue_id'
@@ -135,8 +135,8 @@ class TestCLICommands:
 
     def test_unregister_removes_source(self, temp_config, temp_workspace, mock_systemctl):
         """Test that sources rm removes a source directory from config."""
-        from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_queues_add, cmd_queues_rm
+        from task_monitor.config import ConfigManager
+        from task_monitor.cli import cmd_queues_add, cmd_queues_rm
         from argparse import Namespace
 
         # First register a queue - queues add uses 'id' not 'queue_id'
@@ -169,8 +169,8 @@ class TestCLICommands:
 
     def test_unregister_nonexistent_source(self, temp_config):
         """Test that queues rm handles non-existent queues gracefully."""
-        from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_queues_rm
+        from task_monitor.config import ConfigManager
+        from task_monitor.cli import cmd_queues_rm
         from argparse import Namespace
 
         args = Namespace(
@@ -185,7 +185,7 @@ class TestCLICommands:
 
     def test_restart_daemon_called(self, temp_config, temp_workspace):
         """Test that register and unregister call systemctl restart."""
-        from task_queue.cli import _restart_daemon
+        from task_monitor.cli import _restart_daemon
 
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(
@@ -206,7 +206,7 @@ class TestCLICommands:
 
     def test_restart_daemon_handles_failure(self, temp_config, temp_workspace):
         """Test that restart daemon handles systemctl failures."""
-        from task_queue.cli import _restart_daemon
+        from task_monitor.cli import _restart_daemon
 
         with patch('subprocess.run') as mock_run:
             # Mock systemctl failure
@@ -223,8 +223,8 @@ class TestCLICommands:
 
     def test_status_command(self, temp_config, temp_workspace):
         """Test status command output."""
-        from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_status
+        from task_monitor.config import ConfigManager
+        from task_monitor.cli import cmd_status
         from argparse import Namespace
         from io import StringIO
         import sys
@@ -249,13 +249,13 @@ class TestCLICommands:
             sys.stdout = old_stdout
 
         assert result == 0
-        assert "Task Queue Status" in output
+        assert "Task Monitor Status" in output
         assert "test-source" in output
 
     def test_list_sources_command(self, temp_config, temp_workspace):
         """Test sources list command."""
-        from task_queue.config import ConfigManager
-        from task_queue.cli import cmd_queues_list
+        from task_monitor.config import ConfigManager
+        from task_monitor.cli import cmd_queues_list
         from argparse import Namespace
         from io import StringIO
         import sys
@@ -353,7 +353,7 @@ class TestCLIIntegration:
                     # 1. Register (queues add)
                     result = subprocess.run(
                         [
-                            "python3", "-m", "task_queue.cli",
+                            "python3", "-m", "task_monitor.cli",
                             "--config", str(config_file),
                             "queues", "add", str(workspace / "tasks" / "ad-hoc"),
                             "--id", "test",
@@ -369,7 +369,7 @@ class TestCLIIntegration:
                     # 2. List queues
                     result = subprocess.run(
                         [
-                            "python3", "-m", "task_queue.cli",
+                            "python3", "-m", "task_monitor.cli",
                             "--config", str(config_file),
                             "queues", "list"
                         ],
@@ -383,7 +383,7 @@ class TestCLIIntegration:
                     # 3. Remove (queues rm)
                     result = subprocess.run(
                         [
-                            "python3", "-m", "task_queue.cli",
+                            "python3", "-m", "task_monitor.cli",
                             "--config", str(config_file),
                             "queues", "rm",
                             "--queue-id", "test"

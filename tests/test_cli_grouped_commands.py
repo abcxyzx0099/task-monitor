@@ -47,7 +47,7 @@ class TaskQueueCLITester:
 
         # Build full command
         full_cmd = [
-            sys.executable, "-m", "task_queue.cli",
+            sys.executable, "-m", "task_monitor.cli",
             "--config", os.path.join(self.temp_dir, "test-config.json")
         ] + cmd
 
@@ -292,7 +292,7 @@ class TaskQueueCLITester:
         print("\n🧪 Test 15: Lock File Format")
 
         # Import to test
-        from task_queue.executor import LockInfo
+        from task_monitor.executor import LockInfo
 
         # Create a test lock file
         lock_file = Path(self.temp_dir) / "test.lock"

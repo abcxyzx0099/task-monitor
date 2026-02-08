@@ -1,5 +1,5 @@
 """
-Coverage tests for task_queue.watchdog module.
+Coverage tests for task_monitor.watchdog module.
 
 Tests the DebounceTracker, TaskDocumentWatcher, and WatchdogManager classes
 to improve coverage from 49% to 70%+.
@@ -12,8 +12,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, Mock
 from watchdog.events import FileCreatedEvent, FileModifiedEvent, DirCreatedEvent
 
-from task_queue.watchdog import DebounceTracker, TaskDocumentWatcher, WatchdogManager
-from task_queue.models import Queue
+from task_monitor.watchdog import DebounceTracker, TaskDocumentWatcher, WatchdogManager
+from task_monitor.models import Queue
 
 
 class TestDebounceTracker:

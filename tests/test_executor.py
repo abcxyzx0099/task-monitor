@@ -1,4 +1,4 @@
-"""Tests for task_queue.executor module."""
+"""Tests for task_monitor.executor module."""
 
 import pytest
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
-from task_queue.executor import (
+from task_monitor.executor import (
     LockInfo,
     get_lock_file_path,
     is_task_locked,
@@ -319,7 +319,7 @@ class TestSyncTaskExecutor:
         task_file.write_text("# Task")
 
         # Mock the query to avoid actual SDK call
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_q = MagicMock()
             mock_query.return_value = mock_q
 
@@ -345,7 +345,7 @@ class TestSyncTaskExecutor:
         task_file = temp_dir / "task-123.md"
         task_file.write_text("# Task")
 
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_q = MagicMock()
             mock_query.return_value = mock_q
 
@@ -379,7 +379,7 @@ class TestSyncTaskExecutor:
         task_file = temp_dir / "task-123.md"
         task_file.write_text("# Task")
 
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_q = MagicMock()
             mock_query.return_value = mock_q
 
@@ -422,7 +422,7 @@ class TestSyncTaskExecutor:
         task_file = temp_dir / "task-123.md"
         task_file.write_text("# Task")
 
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_q = MagicMock()
             mock_query.return_value = mock_q
 
@@ -459,7 +459,7 @@ class TestSyncTaskExecutor:
         task_file.write_text("# Task")
 
         # Patch asyncio.run to raise CancelledError
-        with patch('task_queue.executor.asyncio.run') as mock_run:
+        with patch('task_monitor.executor.asyncio.run') as mock_run:
             import asyncio
             mock_run.side_effect = asyncio.CancelledError()
 
@@ -478,7 +478,7 @@ class TestSyncTaskExecutor:
         task_file = temp_dir / "task-123.md"
         task_file.write_text("# Task")
 
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_query.side_effect = RuntimeError("Test error")
 
             result = executor.execute(task_file)
@@ -493,7 +493,7 @@ class TestSyncTaskExecutor:
         task_file = temp_dir / "task-123.md"
         task_file.write_text("# Task")
 
-        with patch('task_queue.executor.query') as mock_query:
+        with patch('task_monitor.executor.query') as mock_query:
             mock_q = MagicMock()
             mock_query.return_value = mock_q
 

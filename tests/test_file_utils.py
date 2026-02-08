@@ -1,4 +1,4 @@
-"""Tests for task_queue atomic module."""
+"""Tests for task_monitor atomic module."""
 
 import pytest
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Thread
 import time
 
-from task_queue.file_utils import AtomicFileWriter, FileLock
+from task_monitor.file_utils import AtomicFileWriter, FileLock
 
 
 class TestAtomicFileWriter:

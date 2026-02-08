@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
-from task_queue.models import DiscoveredTask, Queue
-from task_queue.file_utils import is_valid_task_id
+from task_monitor.models import DiscoveredTask, Queue
+from task_monitor.file_utils import is_valid_task_id
 
 
 class TaskScanner:

@@ -1,5 +1,5 @@
 """
-Additional coverage tests for task_queue.cli module.
+Additional coverage tests for task_monitor.cli module.
 
 Tests error handling, edge cases, and the cmd_run command to improve
 coverage from 50% to 70%+.
@@ -14,11 +14,11 @@ from unittest.mock import patch, MagicMock, call
 from io import StringIO
 import sys
 
-from task_queue.cli import (
+from task_monitor.cli import (
     cmd_status, cmd_queues_add, cmd_queues_list, cmd_queues_rm,
     cmd_run, _restart_daemon, main
 )
-from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
+from task_monitor.config import ConfigManager, DEFAULT_CONFIG_FILE
 
 
 class TestRestartDaemon:
@@ -418,7 +418,7 @@ class TestCmdRun:
         args = MagicMock(config=config_path, cycles=999)
 
         # Mock pick_next_task to raise KeyboardInterrupt after first call
-        with patch('task_queue.cli.TaskRunner') as mock_runner_class:
+        with patch('task_monitor.cli.TaskRunner') as mock_runner_class:
             mock_runner = MagicMock()
             mock_runner_class.return_value = mock_runner
 
@@ -450,7 +450,7 @@ class TestCmdRun:
         args = MagicMock(config=config_path, cycles=1)
 
         # Mock TaskRunner to raise exception
-        with patch('task_queue.cli.TaskRunner') as mock_runner_class:
+        with patch('task_monitor.cli.TaskRunner') as mock_runner_class:
             mock_runner_class.side_effect = RuntimeError("Test error")
 
             old_stdout = sys.stdout

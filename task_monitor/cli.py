@@ -14,9 +14,9 @@ import subprocess
 import threading
 from pathlib import Path
 
-from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
-from task_queue.task_runner import TaskRunner
-from task_queue.executor import get_lock_file_path, LockInfo, get_locked_task
+from task_monitor.config import ConfigManager, DEFAULT_CONFIG_FILE
+from task_monitor.task_runner import TaskRunner
+from task_monitor.executor import get_lock_file_path, LockInfo, get_locked_task
 
 
 def _restart_daemon() -> bool:
@@ -103,7 +103,7 @@ def cmd_init(args):
 
     for queue in queues:
         source_id = queue["id"]
-        task_queue = str(queue["path"])
+        task_monitor = str(queue["path"])
 
         if args.skip_existing and config_manager.config.get_queue(source_id):
             print(f"   ⏭️  Skipped existing: {source_id}")
@@ -115,12 +115,12 @@ def cmd_init(args):
                 print(f"   🔄 Removed existing: {source_id}")
 
             config_manager.add_queue(
-                path=task_queue,
+                path=task_monitor,
                 id=source_id,
                 description=queue["description"]
             )
             print(f"   ✅ Registered: {source_id}")
-            print(f"      Path: {task_queue}")
+            print(f"      Path: {task_monitor}")
         except Exception as e:
             print(f"   ❌ Failed to register {source_id}: {e}")
             return 1
@@ -166,7 +166,7 @@ def cmd_status(args):
         return 1
 
     print("=" * 60)
-    print("📊 Task Queue Status")
+    print("📊 Task Monitor Status")
     print("=" * 60)
 
     print(f"\nConfiguration: {args.config}")
@@ -692,7 +692,7 @@ def cmd_run(args):
         queues = config.queues
 
         print("=" * 60)
-        print("🔄 Running Task Queue (Interactive Mode)")
+        print("🔄 Running Task Monitor (Interactive Mode)")
         print("=" * 60)
         print(f"Configuration: {args.config}")
         print(f"Task Source Directories: {len(queues)}")
@@ -749,7 +749,7 @@ def cmd_run(args):
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Task Queue CLI (Directory-Based State)",
+        description="Task Monitor CLI (Directory-Based State)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

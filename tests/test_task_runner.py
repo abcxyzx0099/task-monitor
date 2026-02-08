@@ -8,8 +8,8 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from task_queue.task_runner import TaskRunner
-from task_queue.models import Queue
+from task_monitor.task_runner import TaskRunner
+from task_monitor.models import Queue
 
 
 class TestTaskRunnerInit:
@@ -100,7 +100,7 @@ class TestExecuteTask:
 
         # Mock the executor to return success
         with patch.object(runner.executor, 'execute') as mock_execute:
-            from task_queue.executor import ExecutionResult
+            from task_monitor.executor import ExecutionResult
             mock_execute.return_value = ExecutionResult(
                 success=True,
                 task_id=task_file.stem,
@@ -130,7 +130,7 @@ class TestExecuteTask:
 
         # Mock the executor to return failure
         with patch.object(runner.executor, 'execute') as mock_execute:
-            from task_queue.executor import ExecutionResult
+            from task_monitor.executor import ExecutionResult
             mock_execute.return_value = ExecutionResult(
                 success=False,
                 task_id=task_file.stem,

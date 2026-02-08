@@ -8,8 +8,8 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from task_queue.daemon import TaskQueueDaemon
-from task_queue.models import Queue
+from task_monitor.daemon import TaskQueueDaemon
+from task_monitor.models import Queue
 
 
 class TestParallelWorkerSetup:
@@ -50,7 +50,7 @@ class TestParallelWorkerSetup:
         daemon = TaskQueueDaemon(config_file=config_file)
 
         # Setup config and task runner manually
-        from task_queue.config import ConfigManager
+        from task_monitor.config import ConfigManager
         config_manager = ConfigManager(config_file)
         daemon.task_runner = Mock()
 
@@ -87,7 +87,7 @@ class TestWorkerLoop:
         daemon.shutdown_requested = False
 
         # Create task runner
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
         # Create queue
@@ -101,7 +101,7 @@ class TestWorkerLoop:
             # Move to completed
             archive_dir = Path(project_workspace) / "tasks" / "ad-hoc" / "completed"
             shutil.move(str(task_file), str(archive_dir / task_file.name))
-            from task_queue.executor import ExecutionResult
+            from task_monitor.executor import ExecutionResult
             return ExecutionResult(success=True, task_id=task_file.stem)
 
         daemon.task_runner.executor.execute = mock_execute
@@ -145,7 +145,7 @@ class TestParallelExecutionSimulation:
             (queue1_path / "pending" / f"task-{timestamp}-{i:02d}-s1.md").write_text(f"# S1 Task {i}")
             (queue2_path / "pending" / f"task-{timestamp}-{i:02d}-s2.md").write_text(f"# S2 Task {i}")
 
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         runner = TaskRunner(str(temp_dir))
 
         queue1 = Queue(id="source1", path=str(queue1_path))

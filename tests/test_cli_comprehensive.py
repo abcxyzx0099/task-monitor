@@ -1,5 +1,5 @@
 """
-Comprehensive tests for task_queue.cli module to improve coverage.
+Comprehensive tests for task_monitor.cli module to improve coverage.
 
 Tests for commands that are currently not well covered:
 - cmd_init
@@ -21,7 +21,7 @@ from unittest.mock import patch, MagicMock, call
 from io import StringIO
 import sys
 
-from task_queue.cli import (
+from task_monitor.cli import (
     cmd_init,
     cmd_tasks_show,
     cmd_tasks_logs,
@@ -46,7 +46,7 @@ class TestFindTaskFile:
         task_file.write_text("# Task")
 
         # Create mock config
-        from task_queue.models import Queue, MonitorConfig
+        from task_monitor.models import Queue, MonitorConfig
         config = MonitorConfig(
             project_workspace=str(workspace),
             queues=[Queue(id="ad-hoc", path=str(queue_path))]
@@ -68,7 +68,7 @@ class TestFindTaskFile:
         task_file.write_text("# Task")
 
         # Create mock config - queue path points to pending
-        from task_queue.models import Queue, MonitorConfig
+        from task_monitor.models import Queue, MonitorConfig
         config = MonitorConfig(
             project_workspace=str(workspace),
             queues=[Queue(id="ad-hoc", path=str(queue_path))]
@@ -83,7 +83,7 @@ class TestFindTaskFile:
         queue_path = workspace / "tasks" / "ad-hoc"
         queue_path.mkdir(parents=True)
 
-        from task_queue.models import Queue, MonitorConfig
+        from task_monitor.models import Queue, MonitorConfig
         config = MonitorConfig(
             project_workspace=str(workspace),
             queues=[Queue(id="ad-hoc", path=str(queue_path))]
@@ -433,7 +433,7 @@ class TestCmdTasksCancel:
         task_file.write_text("# Task")
 
         # Create lock file
-        from task_queue.executor import LockInfo, get_lock_file_path
+        from task_monitor.executor import LockInfo, get_lock_file_path
         lock_file = get_lock_file_path(task_file)
         lock_info = LockInfo(
             task_id="task-123",

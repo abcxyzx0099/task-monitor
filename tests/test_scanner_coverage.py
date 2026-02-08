@@ -1,5 +1,5 @@
 """
-Coverage tests for task_queue.scanner module.
+Coverage tests for task_monitor.scanner module.
 
 Tests the TaskScanner class and its methods to improve coverage from 22% to 60%+.
 """
@@ -11,8 +11,8 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import patch, Mock
 
-from task_queue.scanner import TaskScanner
-from task_queue.models import Queue, DiscoveredTask
+from task_monitor.scanner import TaskScanner
+from task_monitor.models import Queue, DiscoveredTask
 
 
 class TestTaskScannerInit:

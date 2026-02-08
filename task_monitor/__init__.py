@@ -13,18 +13,18 @@ Architecture: No state file - directory structure is the source of truth.
 __version__ = "2.0.0"
 __author__ = "DataChat Project"
 
-from task_queue.models import (
+from task_monitor.models import (
     Queue,
     MonitorConfig,
     MonitorSettings,
     DiscoveredTask,
 )
 
-from task_queue.config import ConfigManager, DEFAULT_CONFIG_FILE
-from task_queue.scanner import TaskScanner
-from task_queue.executor import SyncTaskExecutor, create_executor
-from task_queue.task_runner import TaskRunner
-from task_queue.watchdog import WatchdogManager, TaskDocumentWatcher
+from task_monitor.config import ConfigManager, DEFAULT_CONFIG_FILE
+from task_monitor.scanner import TaskScanner
+from task_monitor.executor import SyncTaskExecutor, create_executor
+from task_monitor.task_runner import TaskRunner
+from task_monitor.watchdog import WatchdogManager, TaskDocumentWatcher
 
 __all__ = [
     # Models

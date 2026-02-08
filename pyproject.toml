@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "task-queue"
+name = "task-monitor"
 version = "1.0.0"
-description = "Task queue system for Claude Agent SDK execution"
+description = "Task monitor system for Claude Agent SDK execution"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -37,18 +37,18 @@ dev = [
 ]
 
 [project.scripts]
-task-monitor = "task_queue.cli:main"
-task-monitor-daemon = "task_queue.daemon:main"
+task-monitor = "task_monitor.cli:main"
+task-monitor-daemon = "task_monitor.daemon:main"
 
 [project.urls]
-Homepage = "https://github.com/datachat/task-queue"
-Repository = "https://github.com/datachat/task-queue"
+Homepage = "https://github.com/datachat/task-monitor"
+Repository = "https://github.com/datachat/task-monitor"
 
 [tool.setuptools]
-packages = ["task_queue"]
+packages = ["task_monitor"]
 
 [tool.setuptools.package-data]
-task_queue = ["py.typed"]
+task_monitor = ["py.typed"]
 
 [tool.black]
 line-length = 100

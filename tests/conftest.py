@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock
 
-from task_queue.models import (
+from task_monitor.models import (
     MonitorConfig, Queue, MonitorSettings, DiscoveredTask
 )
 

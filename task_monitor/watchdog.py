@@ -16,8 +16,8 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent, FileCreatedEvent, FileModifiedEvent
 
-from task_queue.models import DiscoveredTask, Queue
-from task_queue.file_utils import is_valid_task_id
+from task_monitor.models import DiscoveredTask, Queue
+from task_monitor.file_utils import is_valid_task_id
 
 
 logger = logging.getLogger(__name__)
@@ -351,4 +351,4 @@ class WatchdogManager:
 
 # Import at end to avoid circular dependency
 if TYPE_CHECKING:
-    from task_queue.models import Queue
+    from task_monitor.models import Queue

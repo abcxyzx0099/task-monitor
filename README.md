@@ -145,7 +145,7 @@ When a task is running, a lock file is created in the queue's pending directory:
 ## Installation
 
 ```bash
-cd /home/admin/workspaces/task-queue
+cd /home/admin/workspaces/task-monitor
 pip install -e .
 ```
 
@@ -153,27 +153,27 @@ pip install -e .
 
 ```bash
 # System commands
-task-queue init                           # Initialize task system
-task-queue status                         # Show system status
-task-queue status --detailed              # Show detailed status
+task-monitor init                           # Initialize task system
+task-monitor status                         # Show system status
+task-monitor status --detailed              # Show detailed status
 
 # Queue commands
-task-queue queues list                    # List configured queues
-task-queue queues add <path> --id <id>    # Add a queue
-task-queue queues rm --queue-id <id>      # Remove a queue
+task-monitor queues list                    # List configured queues
+task-monitor queues add <path> --id <id>    # Add a queue
+task-monitor queues rm --queue-id <id>      # Remove a queue
 
 # Task commands
-task-queue tasks show <task-id>           # Show task document path
-task-queue tasks logs <task-id>           # Show result JSON
-task-queue tasks cancel <task-id>         # Cancel a running task
+task-monitor tasks show <task-id>           # Show task document path
+task-monitor tasks logs <task-id>           # Show result JSON
+task-monitor tasks cancel <task-id>         # Cancel a running task
 
 # Worker commands
-task-queue workers status                 # Show detailed worker status
-task-queue workers list                   # List workers
+task-monitor workers status                 # Show detailed worker status
+task-monitor workers list                   # List workers
 
 # Logs
-task-queue logs                           # Show daemon logs
-task-queue logs --follow                  # Follow logs live
+task-monitor logs                           # Show daemon logs
+task-monitor logs --follow                  # Follow logs live
 ```
 
 ## Configuration
@@ -207,19 +207,19 @@ The monitor runs as a systemd user service:
 
 ```bash
 # Start daemon
-systemctl --user start task-queue.service
+systemctl --user start task-monitor.service
 
 # Stop daemon
-systemctl --user stop task-queue.service
+systemctl --user stop task-monitor.service
 
 # Restart daemon
-systemctl --user restart task-queue.service
+systemctl --user restart task-monitor.service
 
 # Enable at login
-systemctl --user enable task-queue.service
+systemctl --user enable task-monitor.service
 
 # View logs
-journalctl --user -u task-queue.service -f
+journalctl --user -u task-monitor.service -f
 ```
 
 ## Per-Queue Architecture

@@ -10,8 +10,8 @@ from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
 from argparse import Namespace
 
-from task_queue.daemon import TaskQueueDaemon, WORKER_KEEPALIVE_TIMEOUT, WORKER_RETRY_DELAY, WORKER_CYCLE_PAUSE
-from task_queue.models import Queue
+from task_monitor.daemon import TaskQueueDaemon, WORKER_KEEPALIVE_TIMEOUT, WORKER_RETRY_DELAY, WORKER_CYCLE_PAUSE
+from task_monitor.models import Queue
 
 
 class TestDaemonInit:
@@ -308,7 +308,7 @@ class TestWorkerLoopEdgeCases:
         daemon.running = True
         daemon.shutdown_requested = False
 
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
         queue = Queue(id="test", path=str(queue_path))
@@ -328,7 +328,7 @@ class TestWorkerLoopEdgeCases:
         daemon.running = True
         daemon.shutdown_requested = False
 
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
         queue = Queue(id="test", path=str(queue_path))
@@ -363,7 +363,7 @@ class TestWorkerLoopEdgeCases:
         daemon.running = True
         daemon.shutdown_requested = False
 
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
         queue = Queue(id="test", path=str(queue_path))
@@ -392,7 +392,7 @@ class TestWorkerLoopEdgeCases:
         daemon.running = True
         daemon.shutdown_requested = False
 
-        from task_queue.task_runner import TaskRunner
+        from task_monitor.task_runner import TaskRunner
         daemon.task_runner = TaskRunner(str(temp_dir))
 
         queue = Queue(id="test", path=str(queue_path))
@@ -488,11 +488,11 @@ class TestMainFunction:
 
     def test_main_with_default_args(self, temp_dir):
         """Test main function with default arguments."""
-        with patch('task_queue.daemon.TaskQueueDaemon') as MockDaemon:
+        with patch('task_monitor.daemon.TaskQueueDaemon') as MockDaemon:
             mock_daemon = Mock()
             MockDaemon.return_value = mock_daemon
 
-            from task_queue.daemon import main
+            from task_monitor.daemon import main
             import sys
 
             # Mock sys.argv to have no args
@@ -512,11 +512,11 @@ class TestMainFunction:
 
     def test_main_with_once_flag(self, temp_dir):
         """Test main function with --once flag."""
-        with patch('task_queue.daemon.TaskQueueDaemon') as MockDaemon:
+        with patch('task_monitor.daemon.TaskQueueDaemon') as MockDaemon:
             mock_daemon = Mock()
             MockDaemon.return_value = mock_daemon
 
-            from task_queue.daemon import main
+            from task_monitor.daemon import main
             import sys
 
             original_argv = sys.argv
@@ -535,11 +535,11 @@ class TestMainFunction:
         """Test main function with custom config file."""
         config_file = temp_dir / "custom-config.json"
 
-        with patch('task_queue.daemon.TaskQueueDaemon') as MockDaemon:
+        with patch('task_monitor.daemon.TaskQueueDaemon') as MockDaemon:
             mock_daemon = Mock()
             MockDaemon.return_value = mock_daemon
 
-            from task_queue.daemon import main
+            from task_monitor.daemon import main
             import sys
 
             original_argv = sys.argv
@@ -620,7 +620,7 @@ class TestRunLoop:
         source_dir = temp_dir / "source1"
         source_dir.mkdir(parents=True)
 
-        from task_queue.models import Queue
+        from task_monitor.models import Queue
         source = Queue(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()
@@ -651,7 +651,7 @@ class TestRunLoop:
         source_dir = temp_dir / "source1"
         source_dir.mkdir(parents=True)
 
-        from task_queue.models import Queue
+        from task_monitor.models import Queue
         source = Queue(id="source1", path=str(source_dir))
 
         daemon = TaskQueueDaemon()

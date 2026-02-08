@@ -1,5 +1,5 @@
 """
-Comprehensive tests for task_queue.file_utils module to improve coverage.
+Comprehensive tests for task_monitor.file_utils module to improve coverage.
 
 Tests for error handling, edge cases, and less-covered code paths.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import os
 
-from task_queue.file_utils import AtomicFileWriter, FileLock, is_valid_task_id
+from task_monitor.file_utils import AtomicFileWriter, FileLock, is_valid_task_id
 
 
 class TestAtomicFileWriterErrorHandling:

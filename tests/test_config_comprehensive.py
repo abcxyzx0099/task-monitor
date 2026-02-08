@@ -1,5 +1,5 @@
 """
-Comprehensive tests for task_queue.config module to improve coverage.
+Comprehensive tests for task_monitor.config module to improve coverage.
 
 Tests for edge cases, error handling, and less-covered code paths.
 """
@@ -12,9 +12,9 @@ from unittest.mock import patch, MagicMock
 from io import StringIO
 import sys
 
-from task_queue.config import ConfigManager, get_default_config_manager
-from task_queue.models import Queue, MonitorConfig
-from task_queue.constants import DEFAULT_CONFIG_FILE
+from task_monitor.config import ConfigManager, get_default_config_manager
+from task_monitor.models import Queue, MonitorConfig
+from task_monitor.constants import DEFAULT_CONFIG_FILE
 
 
 class TestConfigManagerMigration:

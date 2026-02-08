@@ -48,7 +48,7 @@ class TestInitCommand:
         test_config = os.path.join(self.temp_dir, "test-config.json")
 
         cmd = [
-            sys.executable, "-m", "task_queue.cli",
+            sys.executable, "-m", "task_monitor.cli",
             "--config", test_config,
             "init"
         ]

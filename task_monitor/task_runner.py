@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime
 
-from task_queue.models import Queue
-from task_queue.executor import SyncTaskExecutor
+from task_monitor.models import Queue
+from task_monitor.executor import SyncTaskExecutor
 
 
 class TaskRunner:
