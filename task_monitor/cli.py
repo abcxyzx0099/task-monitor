@@ -378,15 +378,13 @@ def _find_task_file(task_id: str, config) -> Path:
     """Find a task file by ID in any source directory."""
     for queue in config.queues:
         queue_path = Path(queue.path)
-        # Check in task-documents
+        # Check in task-documents (pending/)
         task_file = queue_path / f"{task_id}.md"
         if task_file.exists():
             return task_file
-        # Check in archive
-        # Get base directory from source path (parent of pending/)
-        base = queue_path.parent
+        # Check in completed/failed (subdirectories within the queue)
         for subdir in ["completed", "failed"]:
-            task_file = base / subdir / f"{task_id}.md"
+            task_file = queue_path / subdir / f"{task_id}.md"
             if task_file.exists():
                 return task_file
     return None
