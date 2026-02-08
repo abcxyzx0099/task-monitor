@@ -14,6 +14,7 @@ import os
 import shutil
 import socket
 import uuid
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime
@@ -22,11 +23,16 @@ from task_monitor.models import Queue
 from task_monitor.executor import SyncTaskExecutor
 
 
+logger = logging.getLogger(__name__)
+
+
 class TaskRunner:
     """
     Simplified task runner using directory-based state.
 
     No state file - the directory structure tells us everything.
+    Uses in-memory tracking for currently running tasks.
+    Uses file-based status tracking (.running files) for CLI visibility.
     """
 
     def __init__(
@@ -43,6 +49,9 @@ class TaskRunner:
 
         # Executor for running tasks
         self.executor = SyncTaskExecutor()
+
+        # In-memory tracking: which task is currently running per queue
+        self.current_tasks = {}  # queue_id -> task_id
 
     def _get_queue_dirs(self, queue: Queue) -> tuple[Path, Path]:
         """
@@ -141,6 +150,8 @@ class TaskRunner:
         Execute a task using the SyncTaskExecutor.
 
         Executes task and moves to completed/failed.
+        Uses in-memory tracking for currently running task.
+        Uses file-based status tracking for CLI visibility.
 
         Args:
             task_file: Path to task document
@@ -150,6 +161,17 @@ class TaskRunner:
             Result dict with status and error info
         """
         task_id = task_file.stem
+
+        # Set in-memory tracking
+        self.current_tasks[queue.id] = task_id
+
+        # Write .running status file for CLI visibility
+        queue_path = Path(queue.path)
+        running_file = queue_path / f".{queue.id}.running"
+        try:
+            running_file.write_text(task_id)
+        except OSError as e:
+            logger.warning(f"Failed to write running status file: {e}")
 
         # Get per-queue directories
         archive_dir, failed_dir = self._get_queue_dirs(queue)
@@ -189,6 +211,15 @@ class TaskRunner:
                         "task_id": task_id
                     }
 
+            # Clear in-memory tracking
+            self.current_tasks.pop(queue.id, None)
+
+            # Remove .running status file
+            try:
+                running_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
             return {
                 "status": "success" if result.success else "failed",
                 "task_id": task_id,
@@ -197,6 +228,15 @@ class TaskRunner:
             }
 
         except Exception as e:
+            # Clear in-memory tracking on exception
+            self.current_tasks.pop(queue.id, None)
+
+            # Remove .running status file on exception
+            try:
+                running_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
             # Exception during execution
             try:
                 # Move to failed directory
@@ -210,6 +250,32 @@ class TaskRunner:
                 "error": str(e),
                 "task_id": task_id
             }
+
+    def get_current_task(self, queue_id: str, queue_path: Optional[Path] = None) -> Optional[str]:
+        """
+        Get the currently running task for a queue.
+
+        Reads from the .running status file for CLI visibility.
+        Falls back to in-memory tracking for daemon process.
+
+        Args:
+            queue_id: Queue identifier (e.g., "ad-hoc", "planned")
+            queue_path: Optional path to queue directory (for CLI context)
+
+        Returns:
+            Task ID if a task is running, None otherwise
+        """
+        # Try file-based tracking first (works for both CLI and daemon)
+        if queue_path:
+            running_file = queue_path / f".{queue_id}.running"
+            if running_file.exists():
+                try:
+                    return running_file.read_text().strip()
+                except OSError:
+                    pass
+
+        # Fall back to in-memory tracking (daemon only)
+        return self.current_tasks.get(queue_id)
 
     def get_status(
         self,

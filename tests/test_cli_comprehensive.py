@@ -424,25 +424,13 @@ class TestCmdTasksCancel:
         finally:
             Path(config_path).unlink(missing_ok=True)
 
-    def test_cmd_tasks_cancel_with_lock(self, temp_dir):
-        """Test cancelling task with lock file."""
+    def test_cmd_tasks_cancel_with_in_memory_tracking(self, temp_dir):
+        """Test cancelling task with in-memory tracking."""
         workspace = temp_dir / "workspace"
         queue_path = workspace / "tasks" / "ad-hoc"
         queue_path.mkdir(parents=True)
         task_file = queue_path / "task-123.md"
         task_file.write_text("# Task")
-
-        # Create lock file
-        from task_monitor.executor import LockInfo, get_lock_file_path
-        lock_file = get_lock_file_path(task_file)
-        lock_info = LockInfo(
-            task_id="task-123",
-            worker="ad-hoc",
-            thread_id="12345",
-            pid=999999,  # Non-existent PID
-            started_at="2026-02-07T12:00:00"
-        )
-        lock_info.save(lock_file)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             config = {
@@ -467,8 +455,9 @@ class TestCmdTasksCancel:
             finally:
                 sys.stdout = old_stdout
 
-            # Task should be cancelled (stale lock removed)
-            assert result == 0 or result == 1  # Depends on whether process exists
+            # Task should not be cancelled since it's not running in memory
+            assert result == 1
+            assert "not running" in output
         finally:
             Path(config_path).unlink(missing_ok=True)
 

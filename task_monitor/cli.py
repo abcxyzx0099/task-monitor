@@ -16,7 +16,6 @@ from pathlib import Path
 
 from task_monitor.config import ConfigManager, DEFAULT_CONFIG_FILE
 from task_monitor.task_runner import TaskRunner
-from task_monitor.executor import get_lock_file_path, LockInfo, get_locked_task
 
 
 def _restart_daemon() -> bool:
@@ -208,7 +207,9 @@ def _print_overview_status(config, status):
     print(f"\n📁 Per-Source Summary:")
     for queue_id, queue_stats in status['queues'].items():
         queue = config.get_queue(queue_id)
-        running = get_locked_task(Path(queue.path))
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
+        # Pass queue_path for file-based status tracking
+        running = task_runner.get_current_task(queue_id, Path(queue.path) if queue else None)
         status_indicator = "🔄 Running" if running else "✅ Idle"
         print(f"\n  📁 {queue_id} ({status_indicator})")
         if queue:
@@ -232,21 +233,21 @@ def _print_detailed_status(config, task_runner, queues):
         if queue.description:
             print(f"Description: {queue.description}")
 
-        # Check for running task
-        running_task = get_locked_task(queue_path)
+        # Check for running task using file-based tracking
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
+        running_task = task_runner.get_current_task(queue.id, queue_path)
         if running_task:
-            lock_file = queue_path / f".{running_task}.lock"
-            lock_info = LockInfo.from_file(lock_file)
             print(f"\n🔄 Running Task:")
             print(f"   Task ID: {running_task}")
-            if lock_info:
-                print(f"   Worker: {lock_info.worker}")
-                print(f"   Started: {lock_info.started_at}")
         else:
             print(f"\n✅ Idle (no running tasks)")
 
-        # List pending tasks
+        # List pending tasks (exclude running task from display)
         pending_tasks = sorted(queue_path.glob("task-*.md"))
+        # Filter out the running task from pending list
+        if running_task:
+            pending_tasks = [t for t in pending_tasks if t.stem != running_task]
+
         if pending_tasks:
             print(f"\n📋 Pending Tasks ({len(pending_tasks)}):")
             for task in pending_tasks[:10]:  # Show first 10
@@ -257,11 +258,10 @@ def _print_detailed_status(config, task_runner, queues):
             print(f"\n📭 No pending tasks")
 
         # Count completed and failed
-        # Get base directory from source path (parent of pending/)
-        base = queue_path.parent
-
-        completed = list((base / "completed").glob("task-*.md")) if (base / "completed").exists() else []
-        failed = list((base / "failed").glob("task-*.md")) if (base / "failed").exists() else []
+        # queue_path is the queue directory (e.g., /tasks/ad-hoc)
+        # completed/failed are subdirectories of the queue directory
+        completed = list((queue_path / "completed").glob("task-*.md")) if (queue_path / "completed").exists() else []
+        failed = list((queue_path / "failed").glob("task-*.md")) if (queue_path / "failed").exists() else []
 
         print(f"\n📊 Statistics:")
         print(f"   Completed: {len(completed)}")
@@ -269,8 +269,8 @@ def _print_detailed_status(config, task_runner, queues):
 
         if completed:
             print(f"\n✅ Recently Completed:")
-            for task in sorted(completed, key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
-                mtime = p.stat().st_mtime
+            for task in sorted(completed, key=lambda t: t.stat().st_mtime, reverse=True)[:5]:
+                mtime = task.stat().st_mtime
                 from datetime import datetime
                 print(f"   - {task.name} ({datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')})")
 
@@ -295,7 +295,8 @@ def cmd_queues_list(args):
         return 0
 
     for queue in config.queues:
-        running = get_locked_task(Path(queue.path))
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
+        running = task_runner.get_current_task(queue.id, Path(queue.path))
         status_indicator = "🔄" if running else "✅"
         print(f"\n  {status_indicator} {queue.id}")
         print(f"      Path: {queue.path}")
@@ -387,6 +388,12 @@ def _find_task_file(task_id: str, config) -> Path:
             task_file = queue_path / subdir / f"{task_id}.md"
             if task_file.exists():
                 return task_file
+        # Check in sibling directories (e.g., if queue.path is "pending", check "../completed")
+        # This handles the case where queue.path points to a subdir like "pending"
+        for subdir in ["completed", "failed"]:
+            task_file = queue_path.parent / subdir / f"{task_id}.md"
+            if task_file.exists():
+                return task_file
     return None
 
 
@@ -465,7 +472,7 @@ def cmd_tasks_logs(args):
 
 
 def cmd_tasks_cancel(args):
-    """Cancel a running task."""
+    """Cancel a running task using file-based status tracking."""
     try:
         config_manager = ConfigManager(args.config)
         config = config_manager.config
@@ -480,55 +487,46 @@ def cmd_tasks_cancel(args):
         print(f"❌ Task '{args.task_id}' not found")
         return 1
 
-    # Check if task has a lock file
-    lock_file = get_lock_file_path(task_file)
+    # Check which queue might be running this task
+    # Get the queue from the task file path (parent dir name is the queue id)
+    queue_id = task_file.parent.parent.name
+    queue = config.get_queue(queue_id)
 
-    if not lock_file.exists():
+    # Use file-based tracking to check if task is running
+    task_runner = TaskRunner(project_workspace=config.project_workspace)
+    running_task = task_runner.get_current_task(queue_id, Path(queue.path) if queue else None)
+
+    if not running_task or running_task != args.task_id:
         print(f"❌ Task '{args.task_id}' is not running")
         print(f"   Only running tasks can be cancelled")
         return 1
 
-    # Read lock info
-    lock_info = LockInfo.from_file(lock_file)
-    if not lock_info:
-        print(f"❌ Invalid lock file")
-        return 1
+    # Clear the in-memory tracking (may not work if CLI process, but harmless)
+    task_runner.current_tasks.pop(queue_id, None)
 
-    # Check if process is still running
-    if os.path.exists(f"/proc/{lock_info.pid}"):
-        print(f"\n🛑 Cancelling task: {args.task_id}")
-        print(f"   Worker: {lock_info.worker}")
-        print(f"   PID: {lock_info.pid}")
-
-        # We can't actually cancel the SDK task, but we can mark it as cancelled
-        # by moving it to failed and removing the lock
+    # Clear the file-based tracking
+    if queue:
+        running_file = Path(queue.path) / f".{queue_id}.running"
         try:
-            lock_file.unlink()
-            print(f"✅ Lock file removed")
+            running_file.unlink(missing_ok=True)
+            print(f"✅ Status tracking cleared for task: {args.task_id}")
+        except OSError as e:
+            print(f"⚠️  Failed to clear status file: {e}")
 
-            # Move task to failed directory
-            # Get base directory from task file's parent directory
-            failed_dir = task_file.parent.parent / "failed"
+    # We can't actually cancel the SDK task, but we can move the task to failed
+    try:
+        # Move task to failed directory
+        failed_dir = task_file.parent.parent / "failed"
 
-            failed_dir.mkdir(parents=True, exist_ok=True)
-            import shutil
-            shutil.move(str(task_file), str(failed_dir / task_file.name))
+        failed_dir.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.move(str(task_file), str(failed_dir / task_file.name))
 
-            print(f"✅ Task moved to failed directory")
-            print(f"   Reason: User cancelled")
-            return 0
-        except Exception as e:
-            print(f"❌ Failed to cancel task: {e}")
-            return 1
-    else:
-        # Stale lock - clean it up
-        print(f"⚠️  Task has stale lock (process no longer running)")
-        print(f"   Cleaning up stale lock...")
-        try:
-            lock_file.unlink()
-            print(f"✅ Stale lock removed")
-        except Exception as e:
-            print(f"❌ Failed to remove stale lock: {e}")
+        print(f"✅ Task moved to failed directory")
+        print(f"   Reason: User cancelled")
+        return 0
+    except Exception as e:
+        print(f"❌ Failed to cancel task: {e}")
         return 1
 
 
@@ -564,39 +562,32 @@ def cmd_workers_status(args):
 
     for queue in queues:
         queue_path = Path(queue.path)
-        running_task = get_locked_task(queue_path)
+
+        # Use file-based tracking to check running task
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
+        running_task = task_runner.get_current_task(queue.id, queue_path)
 
         print(f"\n┌─────────────────────────────────────────────────────────────┐")
         print(f"│ Worker: {queue.id}")
         print(f"├─────────────────────────────────────────────────────────────┤")
 
         if running_task:
-            lock_file = queue_path / f".{running_task}.lock"
-            lock_info = LockInfo.from_file(lock_file)
-
             print(f"│ State: 🔄 RUNNING (Executing task)")
-            if lock_info:
-                print(f"│ Thread ID: {lock_info.thread_id}")
-                from datetime import datetime
-                started = datetime.fromisoformat(lock_info.started_at)
-                elapsed = (datetime.now() - started).total_seconds()
-                print(f"│ Current Task: {running_task}")
-                print(f"│ Started: {lock_info.started_at}")
-                print(f"│ Elapsed: {int(elapsed // 60)}m {int(elapsed % 60)}s")
+            print(f"│ Current Task: {running_task}")
         else:
             print(f"│ State: ✅ IDLE (Waiting for tasks)")
 
         # Count tasks in this source
-        pending = len(list(queue_path.glob("task-*.md")))
+        # queue_path is the queue directory (e.g., /tasks/ad-hoc)
+        pending_dir = queue_path / "pending"
+        pending = len(list(pending_dir.glob("task-*.md"))) if pending_dir.exists() else 0
 
-        # Get base directory from source path (parent of pending/)
-        base = queue_path.parent
+        # completed and failed are subdirectories of the queue directory
+        completed_dir = queue_path / "completed"
+        failed_dir = queue_path / "failed"
 
-        archive = base / "completed"
-        failed = base / "failed"
-
-        completed = len(list(archive.glob("task-*.md"))) if archive.exists() else 0
-        failed_count = len(list(failed.glob("task-*.md"))) if failed.exists() else 0
+        completed = len(list(completed_dir.glob("task-*.md"))) if completed_dir.exists() else 0
+        failed_count = len(list(failed_dir.glob("task-*.md"))) if failed_dir.exists() else 0
 
         print(f"│")
         print(f"│ Tasks Processed: {completed + failed_count}")
@@ -605,7 +596,8 @@ def cmd_workers_status(args):
         print(f"└─────────────────────────────────────────────────────────────┘")
 
     # Summary
-    running_count = sum(1 for sd in queues if get_locked_task(Path(sd.path)))
+    task_runner = TaskRunner(project_workspace=config.project_workspace)
+    running_count = sum(1 for sd in queues if task_runner.get_current_task(sd.id, Path(sd.path)))
     idle_count = len(queues) - running_count
 
     print(f"\nSummary:")
@@ -633,7 +625,8 @@ def cmd_workers_list(args):
         return 0
 
     for queue in queues:
-        running_task = get_locked_task(Path(queue.path))
+        task_runner = TaskRunner(project_workspace=config.project_workspace)
+        running_task = task_runner.get_current_task(queue.id, Path(queue.path))
         status = "🔄 Running" if running_task else "✅ Idle"
         print(f"\n  {status} {queue.id}")
         print(f"      Path: {queue.path}")

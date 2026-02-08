@@ -4,15 +4,14 @@ Task executor using Claude Agent SDK.
 Simplified for directory-based state architecture.
 No Task model - just execute task document files.
 
-Lock file tracking: Each running task has a .task-{id}.lock file
-containing thread_id, worker, pid, and started_at timestamp.
+No lock files - uses in-memory tracking in the daemon.
+The daemon tracks which task is currently running per queue.
 """
 
 import asyncio
 import json
 import logging
 import os
-import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Any, Dict
@@ -46,85 +45,6 @@ except Exception:
 # Verify environment variables are loaded
 _ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 _ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
-
-
-@dataclass
-class LockInfo:
-    """Lock file information for running task tracking."""
-    task_id: str
-    worker: str  # e.g., "ad-hoc", "planned"
-    thread_id: str
-    pid: int
-    started_at: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return asdict(self)
-
-    @classmethod
-    def from_file(cls, lock_file: Path) -> Optional['LockInfo']:
-        """Read lock info from file."""
-        try:
-            with open(lock_file, 'r') as f:
-                data = json.load(f)
-            return cls(**data)
-        except Exception:
-            return None
-
-    def save(self, lock_file: Path) -> None:
-        """Save lock info to file."""
-        with open(lock_file, 'w') as f:
-            json.dump(self.to_dict(), f, indent=2)
-
-
-def get_lock_file_path(task_file: Path) -> Path:
-    """Get the lock file path for a task file."""
-    # Lock file is in the same directory as the task file
-    # Name: .task-{id}.lock
-    return task_file.parent / f".{task_file.stem}.lock"
-
-
-def is_task_locked(task_file: Path) -> bool:
-    """Check if a task is currently locked (running)."""
-    lock_file = get_lock_file_path(task_file)
-    if not lock_file.exists():
-        return False
-
-    # Check if lock is stale (process no longer running)
-    lock_info = LockInfo.from_file(lock_file)
-    if lock_info and not process_exists(lock_info.pid):
-        # Stale lock - remove it
-        try:
-            lock_file.unlink()
-        except Exception:
-            pass
-        return False
-
-    return lock_file.exists()
-
-
-def get_locked_task(task_source_dir: Path) -> Optional[str]:
-    """Get the currently locked task ID in a directory."""
-    lock_files = list(task_source_dir.glob(".task-*.lock"))
-    if not lock_files:
-        return None
-
-    # Return the first locked task (should be only one per directory)
-    for lock_file in lock_files:
-        lock_info = LockInfo.from_file(lock_file)
-        if lock_info and process_exists(lock_info.pid):
-            return lock_info.task_id
-
-    # If all locks are stale, return None
-    return None
-
-
-def process_exists(pid: int) -> bool:
-    """Check if a process with given PID exists."""
-    try:
-        return os.path.exists(f"/proc/{pid}")
-    except Exception:
-        return False
 
 
 @dataclass
@@ -220,23 +140,6 @@ class SyncTaskExecutor:
         task_id = task_file.stem
         relative_task_path = str(task_file.relative_to(self.project_workspace))
 
-        # Create lock file to track running task
-        current_thread = threading.current_thread()
-        thread_id = str(current_thread.ident or 0)
-        process_pid = os.getpid()
-
-        lock_info = LockInfo(
-            task_id=task_id,
-            worker=worker,
-            thread_id=thread_id,
-            pid=process_pid,
-            started_at=datetime.now().isoformat()
-        )
-
-        lock_file = get_lock_file_path(task_file)
-        lock_info.save(lock_file)
-        logger.info(f"[{task_id}] Lock created: {lock_file}")
-
         logger.info(f"[{task_id}] Task started: {relative_task_path}")
 
         start_time = datetime.now()
@@ -310,14 +213,6 @@ IMPORTANT:
                             result.completed_at = datetime.now().isoformat()
                             logger.info(f"[{task_id}] Task completed in {duration:.1f}s")
 
-                            # Delete lock file
-                            try:
-                                if lock_file.exists():
-                                    lock_file.unlink()
-                                    logger.info(f"[{task_id}] Lock deleted")
-                            except Exception as e:
-                                logger.warning(f"[{task_id}] Failed to delete lock: {e}")
-
                             # Save result JSON file
                             try:
                                 result_path = result.save_to_file(self.project_workspace, worker)
@@ -339,14 +234,6 @@ IMPORTANT:
                             result.session_id = getattr(message, 'session_id', None)
 
                             logger.error(f"[{task_id}] Task failed: {result.error}")
-
-                            # Delete lock file
-                            try:
-                                if lock_file.exists():
-                                    lock_file.unlink()
-                                    logger.info(f"[{task_id}] Lock deleted")
-                            except Exception as e:
-                                logger.warning(f"[{task_id}] Failed to delete lock: {e}")
 
                             # Save result JSON file even for errors
                             try:
@@ -373,14 +260,6 @@ IMPORTANT:
                 result.error = "Task cancelled"
                 result.completed_at = datetime.now().isoformat()
 
-                # Delete lock file
-                try:
-                    if lock_file.exists():
-                        lock_file.unlink()
-                        logger.info(f"[{task_id}] Lock deleted")
-                except Exception:
-                    pass
-
                 try:
                     result.save_to_file(self.project_workspace, worker)
                 except Exception:
@@ -392,14 +271,6 @@ IMPORTANT:
                 result.error = f"{type(e).__name__}: {str(e)}"
                 result.completed_at = datetime.now().isoformat()
                 logger.error(f"[{task_id}] Task exception: {type(e).__name__}: {str(e)}")
-
-                # Delete lock file
-                try:
-                    if lock_file.exists():
-                        lock_file.unlink()
-                        logger.info(f"[{task_id}] Lock deleted")
-                except Exception:
-                    pass
 
                 try:
                     result.save_to_file(self.project_workspace, worker)

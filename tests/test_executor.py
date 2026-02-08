@@ -3,209 +3,15 @@
 import pytest
 import json
 import tempfile
-import threading
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
 from task_monitor.executor import (
-    LockInfo,
-    get_lock_file_path,
-    is_task_locked,
-    get_locked_task,
-    process_exists,
     ExecutionResult,
     SyncTaskExecutor,
     create_executor,
 )
-
-
-class TestLockInfo:
-    """Tests for LockInfo dataclass."""
-
-    def test_lockinfo_creation(self):
-        """Test creating a LockInfo instance."""
-        lock = LockInfo(
-            task_id="task-123",
-            worker="ad-hoc",
-            thread_id="12345",
-            pid=12345,
-            started_at="2026-02-07T12:00:00"
-        )
-        assert lock.task_id == "task-123"
-        assert lock.worker == "ad-hoc"
-        assert lock.thread_id == "12345"
-        assert lock.pid == 12345
-        assert lock.started_at == "2026-02-07T12:00:00"
-
-    def test_to_dict(self):
-        """Test LockInfo.to_dict() method."""
-        lock = LockInfo(
-            task_id="task-123",
-            worker="ad-hoc",
-            thread_id="12345",
-            pid=12345,
-            started_at="2026-02-07T12:00:00"
-        )
-        data = lock.to_dict()
-        assert data == {
-            "task_id": "task-123",
-            "worker": "ad-hoc",
-            "thread_id": "12345",
-            "pid": 12345,
-            "started_at": "2026-02-07T12:00:00"
-        }
-
-    def test_from_file_valid(self, temp_dir):
-        """Test LockInfo.from_file() with valid lock file."""
-        lock_file = temp_dir / "test.lock"
-        lock_data = {
-            "task_id": "task-123",
-            "worker": "ad-hoc",
-            "thread_id": "12345",
-            "pid": 12345,
-            "started_at": "2026-02-07T12:00:00"
-        }
-        lock_file.write_text(json.dumps(lock_data))
-
-        lock = LockInfo.from_file(lock_file)
-        assert lock is not None
-        assert lock.task_id == "task-123"
-        assert lock.worker == "ad-hoc"
-
-    def test_from_file_invalid_json(self, temp_dir):
-        """Test LockInfo.from_file() with invalid JSON."""
-        lock_file = temp_dir / "test.lock"
-        lock_file.write_text("invalid json")
-
-        lock = LockInfo.from_file(lock_file)
-        assert lock is None
-
-    def test_from_file_nonexistent(self, temp_dir):
-        """Test LockInfo.from_file() with nonexistent file."""
-        lock_file = temp_dir / "nonexistent.lock"
-        lock = LockInfo.from_file(lock_file)
-        assert lock is None
-
-    def test_from_file_missing_fields(self, temp_dir):
-        """Test LockInfo.from_file() with missing required fields."""
-        lock_file = temp_dir / "test.lock"
-        lock_file.write_text(json.dumps({"task_id": "task-123"}))
-
-        lock = LockInfo.from_file(lock_file)
-        assert lock is None
-
-    def test_save(self, temp_dir):
-        """Test LockInfo.save() method."""
-        lock_file = temp_dir / "test.lock"
-        lock = LockInfo(
-            task_id="task-123",
-            worker="ad-hoc",
-            thread_id="12345",
-            pid=12345,
-            started_at="2026-02-07T12:00:00"
-        )
-        lock.save(lock_file)
-
-        assert lock_file.exists()
-        data = json.loads(lock_file.read_text())
-        assert data["task_id"] == "task-123"
-        assert data["worker"] == "ad-hoc"
-
-
-class TestLockFileHelpers:
-    """Tests for lock file helper functions."""
-
-    def test_get_lock_file_path(self):
-        """Test get_lock_file_path() function."""
-        task_file = Path("/tmp/tasks/pending/task-123.md")
-        lock_path = get_lock_file_path(task_file)
-        assert lock_path == Path("/tmp/tasks/pending/.task-123.lock")
-
-    def test_is_task_locked_no_lock_file(self, temp_dir):
-        """Test is_task_locked() when no lock file exists."""
-        task_file = temp_dir / "task-123.md"
-        task_file.write_text("# Task")
-
-        assert is_task_locked(task_file) is False
-
-    def test_is_task_locked_with_valid_lock(self, temp_dir):
-        """Test is_task_locked() with valid lock file."""
-        task_file = temp_dir / "task-123.md"
-        task_file.write_text("# Task")
-
-        lock_file = get_lock_file_path(task_file)
-        lock_data = {
-            "task_id": "task-123",
-            "worker": "ad-hoc",
-            "thread_id": "12345",
-            "pid": 999999,  # Non-existent PID
-            "started_at": "2026-02-07T12:00:00"
-        }
-        lock_file.write_text(json.dumps(lock_data))
-
-        # With non-existent PID, should return False (stale lock cleaned up)
-        assert is_task_locked(task_file) is False
-        # Lock file should be removed
-        assert not lock_file.exists()
-
-    def test_is_task_locked_stale_lock_removed(self, temp_dir):
-        """Test that stale lock files are removed."""
-        task_file = temp_dir / "task-123.md"
-        task_file.write_text("# Task")
-
-        lock_file = get_lock_file_path(task_file)
-        lock_data = {
-            "task_id": "task-123",
-            "worker": "ad-hoc",
-            "thread_id": "12345",
-            "pid": 999999,
-            "started_at": "2026-02-07T12:00:00"
-        }
-        lock_file.write_text(json.dumps(lock_data))
-
-        # Lock file exists before check
-        assert lock_file.exists()
-
-        # Check locks (should clean up stale lock)
-        is_task_locked(task_file)
-
-        # Lock file should be removed after stale check
-        assert not lock_file.exists()
-
-    def test_get_locked_task_no_locks(self, temp_dir):
-        """Test get_locked_task() with no lock files."""
-        assert get_locked_task(temp_dir) is None
-
-    def test_get_locked_task_with_stale_lock(self, temp_dir):
-        """Test get_locked_task() with stale lock file."""
-        lock_file = temp_dir / ".task-123.lock"
-        lock_data = {
-            "task_id": "task-123",
-            "worker": "ad-hoc",
-            "thread_id": "12345",
-            "pid": 999999,
-            "started_at": "2026-02-07T12:00:00"
-        }
-        lock_file.write_text(json.dumps(lock_data))
-
-        # Should return None for stale lock
-        assert get_locked_task(temp_dir) is None
-
-    def test_process_exists_current_process(self):
-        """Test process_exists() with current process."""
-        import os
-        current_pid = os.getpid()
-        assert process_exists(current_pid) is True
-
-    def test_process_exists_nonexistent(self):
-        """Test process_exists() with non-existent PID."""
-        assert process_exists(999999) is False
-
-    def test_process_exists_error_handling(self):
-        """Test process_exists() handles errors gracefully."""
-        # Test with invalid PID (negative number)
-        assert process_exists(-1) is False
 
 
 class TestExecutionResult:
@@ -339,40 +145,6 @@ class TestSyncTaskExecutor:
 
             assert result.task_id == "task-123"
 
-    def test_execute_creates_lock_file(self, temp_dir):
-        """Test execute() creates lock file during execution."""
-        executor = SyncTaskExecutor(temp_dir)
-        task_file = temp_dir / "task-123.md"
-        task_file.write_text("# Task")
-
-        with patch('task_monitor.executor.query') as mock_query:
-            mock_q = MagicMock()
-            mock_query.return_value = mock_q
-
-            async def mock_messages():
-                # First check - lock should exist
-                lock_path = get_lock_file_path(task_file)
-                assert lock_path.exists()
-
-                # Read lock content
-                lock_info = LockInfo.from_file(lock_path)
-                assert lock_info is not None
-                assert lock_info.task_id == "task-123"
-                assert lock_info.pid == lock_info.pid  # Current PID
-
-                msg = MagicMock()
-                msg.subtype = 'success'
-                msg.result = "Done"
-                msg.content = []
-                yield msg
-
-                # After success, lock should be removed
-                assert not lock_path.exists()
-
-            mock_q.__aiter__ = lambda self: mock_messages()
-
-            executor.execute(task_file)
-
     def test_execute_with_mocked_sdk(self, temp_dir):
         """Test execute() with mocked SDK success path."""
         executor = SyncTaskExecutor(temp_dir)
@@ -467,10 +239,6 @@ class TestSyncTaskExecutor:
 
             assert result.success is False
             assert "cancelled" in result.error.lower()
-
-            # Lock file should be cleaned up
-            lock_path = get_lock_file_path(task_file)
-            assert not lock_path.exists()
 
     def test_execute_handles_general_exception(self, temp_dir):
         """Test execute() handles general exceptions."""

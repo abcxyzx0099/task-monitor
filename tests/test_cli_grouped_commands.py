@@ -17,11 +17,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-# Add task-queue to path
-sys.path.insert(0, "/home/admin/workspaces/task-queue")
+# Add task-monitor to path
+sys.path.insert(0, "/home/admin/workspaces/task-monitor")
 
 
-class TaskQueueCLITester:
+class TestTaskQueueCLI:
     """Test suite for task-queue CLI."""
 
     def __init__(self):
@@ -56,7 +56,7 @@ class TaskQueueCLITester:
             cwd=cwd,
             capture_output=True,
             text=True,
-            env={**os.environ, "PYTHONPATH": "/home/admin/workspaces/task-queue"}
+            env={**os.environ, "PYTHONPATH": "/home/admin/workspaces/task-monitor"}
         )
 
         return result
@@ -287,59 +287,46 @@ class TaskQueueCLITester:
         self.assert_in_output(result.stdout, "Removed existing: ad-hoc", "removes ad-hoc")
         self.assert_in_output(result.stdout, "Removed existing: planned", "removes planned")
 
-    def test_15_lock_file_format(self):
-        """Test lock file has correct format."""
-        print("\n🧪 Test 15: Lock File Format")
+    def test_15_in_memory_tracking(self):
+        """Test in-memory tracking of running tasks."""
+        print("\n🧪 Test 15: In-Memory Tracking")
 
-        # Import to test
-        from task_monitor.executor import LockInfo
+        from task_monitor.task_runner import TaskRunner
+        from task_monitor.models import Queue, MonitorConfig
 
-        # Create a test lock file
-        lock_file = Path(self.temp_dir) / "test.lock"
-        lock_info = LockInfo(
-            task_id="task-20260207-123456",
-            worker="ad-hoc",
-            thread_id="140234567890123",
-            pid=12345,
-            started_at="2026-02-07T12:35:00.123456"
-        )
-        lock_info.save(lock_file)
+        workspace = Path(self.temp_dir)
+        queue_path = workspace / "tasks" / "ad-hoc"
+        queue_path.mkdir(parents=True, exist_ok=True)
 
-        # Read it back
-        loaded = LockInfo.from_file(lock_file)
+        # Create a TaskRunner
+        runner = TaskRunner(project_workspace=str(workspace))
 
-        if loaded and loaded.task_id == lock_info.task_id:
-            self.record_test(True, "Lock file saves and loads correctly")
-            self.record_test(True, f"Lock has thread_id: {loaded.thread_id}")
-            self.record_test(True, f"Lock has worker: {loaded.worker}")
-            self.record_test(True, f"Lock has pid: {loaded.pid}")
+        # Initially no task running
+        running = runner.get_current_task("ad-hoc")
+        if running is None:
+            self.record_test(True, "No task running initially")
         else:
-            self.record_test(False, "Lock file format incorrect")
+            self.record_test(False, f"Expected no running task, got: {running}")
 
-        # Check JSON format
-        import json
-        with open(lock_file, 'r') as f:
-            data = json.load(f)
+        # Simulate setting a running task
+        runner.current_tasks["ad-hoc"] = "task-20260207-123456"
 
-        if data.get("task_id") == "task-20260207-123456":
-            self.record_test(True, "Lock file contains task_id")
+        # Check the task is tracked
+        running = runner.get_current_task("ad-hoc")
+        if running == "task-20260207-123456":
+            self.record_test(True, "Task tracked in memory")
         else:
-            self.record_test(False, "Lock file missing task_id")
+            self.record_test(False, f"Expected task-20260207-123456, got: {running}")
 
-        if data.get("worker") == "ad-hoc":
-            self.record_test(True, "Lock file contains worker")
-        else:
-            self.record_test(False, "Lock file missing worker")
+        # Clear the tracking
+        runner.current_tasks.pop("ad-hoc", None)
 
-        if "thread_id" in data:
-            self.record_test(True, "Lock file contains thread_id")
+        # Verify cleared
+        running = runner.get_current_task("ad-hoc")
+        if running is None:
+            self.record_test(True, "Tracking cleared successfully")
         else:
-            self.record_test(False, "Lock file missing thread_id")
-
-        if "pid" in data:
-            self.record_test(True, "Lock file contains pid")
-        else:
-            self.record_test(False, "Lock file missing pid")
+            self.record_test(False, f"Expected no running task after clear, got: {running}")
 
     # ========================================================================
     # HELPERS
@@ -385,7 +372,7 @@ class TaskQueueCLITester:
             self.test_12_sources_rm_removes_queue()
             self.test_13_init_idempotent()
             self.test_14_init_force_reinitialize()
-            self.test_15_lock_file_format()
+            self.test_15_in_memory_tracking()
 
             return self.print_summary()
 
@@ -415,7 +402,7 @@ class TaskQueueCLITester:
 
 def main():
     """Run the test suite."""
-    tester = TaskQueueCLITester()
+    tester = TestTaskQueueCLI()
     success = tester.run_all_tests()
     return 0 if success else 1
 
