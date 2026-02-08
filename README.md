@@ -1,17 +1,19 @@
 # Task Monitor
 
-A task monitoring and execution system that processes task specifications using the Claude Agent SDK. Features event-driven file monitoring with parallel worker architecture and lock file-based running task tracking.
+A task monitoring and execution system that processes task specifications using the Claude Agent SDK. Features event-driven file monitoring with parallel worker architecture and file-based running task status tracking.
 
 ## Architecture Overview
 
 ```
-[Task Monitor System - v2.1 Directory-Based State with Parallel Workers & Lock Files]
+[Task Monitor System - v2.1 Directory-Based State with Parallel Workers & Status Tracking]
 
 Queue A                          Queue B
 tasks/ad-hoc/                    tasks/planned/
 [pending/task-a1.md]             [pending/task-b1.md]
-[pending/.task-a1.lock] ← Running [pending/task-b2.md]
-[pending/task-a2.md]
+[pending/task-a2.md]             [pending/task-b2.md]
+     │                                  │
+     │ [.ad-hoc.running]              │ [.planned.running]
+     │ contains "task-a1"              │ contains "task-b1"
      │                                  │
      ▼                                  ▼
 ┌─────────────────┐            ┌─────────────────┐
@@ -44,7 +46,7 @@ Execution Model:
 | **1** | **Queue** | A folder containing task document files in `pending/`. Watched for file changes. |
 | **2** | **Task Document** | Individual task specification file (e.g., `task-YYYYMMDD-HHMMSS-description.md`). |
 | **3** | **Project Workspace** | The working directory where Claude Agent SDK executes. |
-| **4** | **Directory-Based State** | File system is the source of truth. Lock files track running tasks. |
+| **4** | **Directory-Based State** | File system is the source of truth. `.running` files provide status visibility. |
 
 ## Features
 
@@ -57,7 +59,7 @@ Execution Model:
 | **Sequential Within Queue** | Tasks from same queue execute one at a time (FIFO) |
 | **Parallel Across Queues** | Different queues execute simultaneously |
 | **Directory-Based State** | No state file - filesystem structure is the source of truth |
-| **Lock File Tracking** | `.task-XXX.lock` files track running tasks with metadata |
+| **Status File Tracking** | `.{queue_id}.running` files provide CLI visibility of running tasks |
 | **JSON Result Files** | Captures execution metadata, cost, token usage per task |
 | **Auto-Load on Create** | Watchdog auto-detects new Task Documents |
 | **Claude Agent SDK Integration** | Executes tasks via `/task-execution` skill |
@@ -94,28 +96,24 @@ Execution Model:
 | Per Queue | Sequential | Tasks execute one at a time (FIFO) |
 | Across Queues | Parallel | Multiple queues run simultaneously |
 
-### Lock File Format
+### Running Status File
 
-When a task is running, a lock file is created in the queue's pending directory:
+When a task is running, a `.running` file is created in the queue directory:
 
-**Location:** `tasks/{queue}/pending/.task-{task-id}.lock`
+**Location:** `tasks/{queue}/.{queue_id}.running`
 
-**Format:**
-```json
-{
-  "task_id": "task-20260207-123456-fix-bug",
-  "queue": "ad-hoc",
-  "thread_id": "140234567890123",
-  "pid": 12345,
-  "started_at": "2026-02-07T12:35:00.123456"
-}
+**Format:** Plain text file containing the task ID
+
+```
+task-20260207-123456-fix-bug
 ```
 
 **Purpose:**
-- Track which task is currently running
-- Identify which queue is executing
-- Enable stale lock detection (via PID check)
-- Track execution start time
+- Provide CLI visibility of currently running task
+- Enable status queries without IPC complexity
+- Simple file-based inter-process communication
+
+**Note:** The `.running` file is for **visibility only**, not locking. The daemon's single-threaded worker per queue prevents concurrent execution.
 
 ## Directory Structure
 
@@ -123,18 +121,18 @@ When a task is running, a lock file is created in the queue's pending directory:
 {project_workspace}/           # e.g., /home/admin/workspaces/datachat
 └── tasks/                     # Parent of all queues
     ├── ad-hoc/                # Queue
+    │   ├── .ad-hoc.running    # Status file (exists when task running)
     │   ├── pending/           # Task input (watchdog monitors)
-    │   │   ├── task-*.md
-    │   │   └── .task-*.lock   # Lock files with metadata
+    │   │   └── task-*.md
     │   ├── completed/         # Completed tasks
     │   ├── failed/            # Failed tasks
     │   ├── results/           # Result JSON files
     │   └── reports/           # Worker execution reports
     │
     └── planned/               # Queue
+        ├── .planned.running    # Status file (exists when task running)
         ├── pending/           # Task input (watchdog monitors)
-        │   ├── task-*.md
-        │   └── .task-*.lock
+        │   └── task-*.md
         ├── completed/
         ├── failed/
         ├── planning/          # Planning documents
@@ -231,7 +229,7 @@ The monitor uses **per-queue worker threads** with these rules:
 | **Same queue** | Sequential FIFO execution (one at a time) |
 | **Different queues** | Parallel execution (can run simultaneously) |
 | **Worker threads** | One thread per Queue |
-| **Lock files** | `.task-XXX.lock` tracks running task with metadata |
+| **Status tracking** | `.{queue_id}.running` file provides running task ID |
 
 ## Key Principles
 
@@ -240,10 +238,10 @@ The monitor uses **per-queue worker threads** with these rules:
 3. **Sequential Within Queue** - Prevents file conflict race conditions
 4. **Parallel Across Queues** - Different queues can execute simultaneously
 5. **Background Processing** - Daemon runs independently with watchdog
-6. **Lock File Tracking** - Running tasks tracked with metadata
-7. **Stale Lock Detection** - Lock files with dead PIDs are automatically cleaned up
+6. **File-Based Status Tracking** - `.running` files provide CLI visibility
+7. **No Locking Required** - Single-threaded worker per queue ensures serialization
 
 ## Version History
 
-- **v2.1** - Added lock file tracking with metadata
+- **v2.1** - Replaced lock file tracking with simple `.running` status files for CLI visibility
 - **v2.0** - Simplified directory-based state, no state file
